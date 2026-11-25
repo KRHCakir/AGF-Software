@@ -45,10 +45,10 @@ namespace AgfAdmin.Services
         public const string PieceUnit = "piece";
 
         // Omschrijving van een productregel: product en ras, verpakking, maat en klasse (lege delen weggelaten).
-        public static string Describe(ProductVariant variant)
+        public static string Describe(ProductVariant variant, string productName = null)
         {
             if (variant == null) return null;
-            var name = string.Join(" ", new[] { variant.Product?.Name, variant.Name }.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim()));
+            var name = string.Join(" ", new[] { productName ?? variant.Product?.Name, variant.Name }.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim()));
             var parts = new[] { name, variant.Packaging, variant.SizeCategory, string.IsNullOrWhiteSpace(variant.TradeClass) ? null : $"klasse {variant.TradeClass.Trim()}" }
                 .Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim());
             var text = string.Join(", ", parts);

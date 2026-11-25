@@ -37,26 +37,43 @@ namespace AgfAdmin.Services
                 var replay = await db.Invoices.AsNoTracking().Where(i => i.RequestId == request.RequestId).Select(i => new { i.Id, i.Kind }).SingleOrDefaultAsync(cancellationToken);
                 if (replay != null)
                 {
-                    var replayed = (await db.InvoiceLines.AsNoTracking().Where(l => l.InvoiceId == replay.Id && l.SalesDeliveryId != null)
-                        .Select(l => l.SalesDeliveryId.Value).ToListAsync(cancellationToken)).Distinct().OrderBy(d => d).ToList();
-                    return replay.Kind == SalesInvoiceRules.KindDelivery && replayed.SequenceEqual(deliveryIds)
+                    // Een herhaling als alle gevraagde leveringen op die factuur staan (ook op een weggehaalde regel): na een netwerkfout
+                    // kan het concept al bijgewerkt zijn, bijvoorbeeld met een levering erbij. Zonder extra kolom of migratie.
+                    var onInvoice = (await db.InvoiceLines.AsNoTracking().Where(l => l.InvoiceId == replay.Id && l.SalesDeliveryId != null)
+                        .Select(l => l.SalesDeliveryId.Value).ToListAsync(cancellationToken)).ToHashSet();
+                    return replay.Kind == SalesInvoiceRules.KindDelivery && deliveryIds.All(onInvoice.Contains)
                         ? ServiceResult<SalesInvoiceDto>.Ok(await DtoAsync(replay.Id, cancellationToken))
                         : ServiceResult<SalesInvoiceDto>.Conflict($"RequestId {request.RequestId} was already used for another invoice.");
                 }
                 var invoice = new Invoice
                 {
-                    Kind = SalesInvoiceRules.KindDelivery, Status = SalesInvoiceRules.StatusConcept, RequestId = request.RequestId, CreatedBy = Actor(),
-                    CreatedAt = DateTime.UtcNow, InvoiceDate = DateTime.UtcNow, PaymentStatus = "Pending"
+                    Kind = SalesInvoiceRules.KindDelivery, Status = SalesInvoiceRules.StatusConcept, RequestId = request.RequestId,
+                    CreatedBy = Actor(), CreatedAt = DateTime.UtcNow, InvoiceDate = DateTime.UtcNow, PaymentStatus = "Pending"
                 };
                 var refused = await AddDeliveriesAsync(invoice, deliveryIds, "deliveryIds", cancellationToken);
                 if (refused != null)
                 {
+                    // Een gelijktijdige identieke aanvraag kan de leveringen net gefactureerd hebben: dan is dit een herhaling, geen conflict.
+                    if (refused.Status == ServiceResultStatus.Conflict && attempt < 3 && await RequestIdExistsAsync(request.RequestId.Value, cancellationToken))
+                    {
+                        db.ChangeTracker.Clear();
+                        continue;
+                    }
                     return refused;
                 }
                 db.Invoices.Add(invoice);
                 try
                 {
-                    return await TrySaveAsync(invoice, cancellationToken) ?? ServiceResult<SalesInvoiceDto>.Created(await DtoAsync(invoice.Id, cancellationToken));
+                    var saved = await TrySaveAsync(invoice, cancellationToken);
+                    if (saved == null)
+                    {
+                        return ServiceResult<SalesInvoiceDto>.Created(await DtoAsync(invoice.Id, cancellationToken));
+                    }
+                    if (saved.Status == ServiceResultStatus.Conflict && attempt < 3 && await RequestIdExistsAsync(request.RequestId.Value, cancellationToken))
+                    {
+                        continue; // de andere identieke aanvraag was eerst: de herhaling bovenaan geeft die factuur terug
+                    }
+                    return saved;
                 }
                 catch (DbUpdateException exception) when (DbErrors.IsUniqueViolation(exception) && attempt < 3)
                 {
@@ -66,7 +83,10 @@ namespace AgfAdmin.Services
             }
         }
 
-        // Leveringen bij een bestaand concept: de rest per orderregel komt erbij (bij een regel die er al staat, wordt het aantal verhoogd).
+        private Task<bool> RequestIdExistsAsync(Guid requestId, CancellationToken cancellationToken) =>
+            db.Invoices.AsNoTracking().AnyAsync(i => i.RequestId == requestId, cancellationToken);
+
+        // Leveringen bij een bestaand concept: de rest per orderregel komt erbij (regels die er al staan blijven ongemoeid; dienst- en emballageregels met een rest komen ook mee zonder nieuwe productregel, behalve als ze bewust van dit concept zijn gehaald).
         public async Task<ServiceResult<SalesInvoiceDto>> AddDeliveriesAsync(int id, AddInvoiceDeliveriesDto request, CancellationToken cancellationToken = default)
         {
             var deliveryIds = (request?.DeliveryIds ?? new List<int>()).Distinct().OrderBy(d => d).ToList();
@@ -126,21 +146,17 @@ namespace AgfAdmin.Services
             var order = deliveries.OrderBy(d => d.OrderNumber, StringComparer.Ordinal).ThenBy(d => d.Sequence).Select(d => d.Id).ToList();
             var sort = invoice.InvoiceLines.Select(l => l.SortOrder).DefaultIfEmpty(-1).Max();
             var changed = false;
+            var newOrderIds = new HashSet<int>(); // orders met een nieuwe productregel
 
             foreach (var state in states.OrderBy(s => order.IndexOf(s.DeliveryId)).ThenBy(s => s.OrderLineId))
             {
                 var existing = current.FirstOrDefault(l => l.SalesDeliveryId == state.DeliveryId && l.SalesOrderLineId == state.OrderLineId);
                 if (existing != null)
                 {
-                    // De rest telt al zonder deze factuur: de regel krijgt het volledige nog niet elders gefactureerde aantal.
-                    if (existing.Quantity != state.Rest)
-                    {
-                        existing.Quantity = state.Rest;
-                        existing.NetWeight = ShareKg(state, state.Rest);
-                        changed = true;
-                    }
+                    // Een regel die al op het concept staat, is misschien bewust aangepast: laat hem ongemoeid.
                     continue;
                 }
+                newOrderIds.Add(state.OrderId);
                 var orderLine = orderLines[state.OrderLineId];
                 var variant = orderLine.ProductVariant;
                 invoice.InvoiceLines.Add(new InvoiceLine
@@ -159,11 +175,13 @@ namespace AgfAdmin.Services
                 var existing = current.FirstOrDefault(l => extra.Packaging ? l.SalesOrderPackagingLineId == extra.LineId : l.SalesOrderServiceLineId == extra.LineId);
                 if (existing != null)
                 {
-                    if (existing.Quantity != extra.Rest)
-                    {
-                        existing.Quantity = extra.Rest;
-                        changed = true;
-                    }
+                    // Een dienst- of emballageregel die al op het concept staat, is misschien bewust aangepast: laat hem ongemoeid.
+                    continue;
+                }
+                if (!newOrderIds.Contains(extra.OrderId)
+                    && invoice.InvoiceLines.Any(l => l.RemovedAt != null && (extra.Packaging ? l.SalesOrderPackagingLineId == extra.LineId : l.SalesOrderServiceLineId == extra.LineId)))
+                {
+                    // Zonder nieuwe productregel komt de rest van een extra mee, behalve als die er bewust van dit concept is afgehaald.
                     continue;
                 }
                 if (extra.Packaging)

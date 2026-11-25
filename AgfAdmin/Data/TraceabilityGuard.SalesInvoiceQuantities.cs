@@ -89,12 +89,16 @@ namespace AgfAdmin.Data
 
             // Alle opgeslagen regels met dezelfde herkomst, behalve de getrackte (die tellen met hun nieuwe waarden).
             var trackedIds = db.ChangeTracker.Entries<InvoiceLine>().Where(e => e.State != EntityState.Added).Select(e => e.Entity.Id).ToHashSet();
-            var others = await ToListAsync(db.InvoiceLines.AsNoTracking()
-                .Where(l => l.RemovedAt == null && l.Invoice.Kind == SalesInvoiceRules.KindDelivery && l.Invoice.Status != SalesInvoiceRules.StatusDiscarded
+            // De status van de factuur is die van de opgeslagen database; een getrackte factuur (bv. in dezelfde save vervallen) telt met zijn nieuwe status.
+            var othersWithInvoice = await ToListAsync(db.InvoiceLines.AsNoTracking()
+                .Where(l => l.RemovedAt == null && l.Invoice.Kind == SalesInvoiceRules.KindDelivery
                     && ((l.SalesDeliveryId != null && deliveryIds.Contains(l.SalesDeliveryId.Value))
                         || (l.SalesOrderServiceLineId != null && serviceIds.Contains(l.SalesOrderServiceLineId.Value))
                         || (l.SalesOrderPackagingLineId != null && packagingIds.Contains(l.SalesOrderPackagingLineId.Value))))
-                .Select(l => new InvoicedRow(l.Id, l.SalesDeliveryId, l.SalesOrderLineId, l.SalesOrderServiceLineId, l.SalesOrderPackagingLineId, l.Quantity)), async, cancellationToken);
+                .Select(l => new { l.InvoiceId, l.Invoice.Status, Row = new InvoicedRow(l.Id, l.SalesDeliveryId, l.SalesOrderLineId, l.SalesOrderServiceLineId, l.SalesOrderPackagingLineId, l.Quantity) }), async, cancellationToken);
+            var others = othersWithInvoice
+                .Where(o => (trackedInvoices.FirstOrDefault(i => i.Id == o.InvoiceId)?.Status ?? o.Status) != SalesInvoiceRules.StatusDiscarded)
+                .Select(o => o.Row).ToList();
             var rows = others.Where(o => !trackedIds.Contains(o.LineId))
                 .Concat(db.ChangeTracker.Entries<InvoiceLine>().Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Unchanged && Counts(e.Entity))
                     .Select(e => new InvoicedRow(e.Entity.Id, e.Entity.SalesDeliveryId, e.Entity.SalesOrderLineId, e.Entity.SalesOrderServiceLineId, e.Entity.SalesOrderPackagingLineId, e.Entity.Quantity)))
@@ -105,9 +109,11 @@ namespace AgfAdmin.Data
             var firstDeliveries = orderIds.Count == 0 ? new Dictionary<int, int>()
                 : (await ToListAsync(db.SalesDeliveries.AsNoTracking().Where(x => orderIds.Contains(x.SalesOrderId) && x.Sequence == 1).Select(x => new { x.SalesOrderId, x.Id }), async, cancellationToken))
                     .ToDictionary(x => x.SalesOrderId, x => x.Id);
-            var consumed = orderLineIds.Count == 0 ? new List<(int LineId, int? DeliveryId, int OrderId, decimal Quantity)>()
+            // Alle orderregels die in rows voorkomen, niet alleen de geraakte: een levering kan al andere gefactureerde regels hebben.
+            var checkedLineIds = rows.Where(r => r.OrderLineId != null).Select(r => r.OrderLineId.Value).Distinct().ToList();
+            var consumed = checkedLineIds.Count == 0 ? new List<(int LineId, int? DeliveryId, int OrderId, decimal Quantity)>()
                 : (await ToListAsync(db.StockReservations.AsNoTracking()
-                    .Where(r => r.SalesOrderLineId != null && orderLineIds.Contains(r.SalesOrderLineId.Value) && r.Status == ReservationRules.StatusConsumed)
+                    .Where(r => r.SalesOrderLineId != null && checkedLineIds.Contains(r.SalesOrderLineId.Value) && r.Status == ReservationRules.StatusConsumed)
                     .Select(r => new { LineId = r.SalesOrderLineId.Value, r.SalesDeliveryId, r.SalesOrderLine.SalesOrderId, r.Quantity }), async, cancellationToken))
                     .Select(r => (r.LineId, DeliveryId: r.SalesDeliveryId, OrderId: r.SalesOrderId, r.Quantity)).ToList();
 
