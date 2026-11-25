@@ -95,6 +95,8 @@ public sealed class SalesInvoicePdfTests : IDisposable
             Assert.Contains(expected, text);
         }
         Assert.DoesNotContain("Supplier B", text);
+        // Netto kg zoals het bedrijf gewichten toont (standaard hele kilo's), niet met drie decimalen.
+        Assert.DoesNotContain("120,000", text);
     }
 
     [Fact]
