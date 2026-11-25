@@ -7,10 +7,10 @@ describe('process menu', () => {
         assert.deepEqual(NAV_GROUPS.map((group) => group.id), ['purchase', 'stock', 'sales', 'master']);
         assert.deepEqual(NAV_GROUPS[0].items.map((item) => item.href), ['/purchase-orders', '/purchase-orders/new', '/receipts', '/inspection', '/purchase-invoices']);
         assert.deepEqual(NAV_GROUPS[1].items.map((item) => item.href), ['/availability', '/partijen']);
-        assert.deepEqual(NAV_GROUPS[2].items.map((item) => item.href), ['/sales-orders', '/mail-drafts']);
+        assert.deepEqual(NAV_GROUPS[2].items.map((item) => item.href), ['/sales-orders', '/sales-invoices', '/mail-drafts']);
         assert.deepEqual(NAV_GROUPS[3].items.map((item) => item.href), ['/relations', '/articles', '/certificates']);
         const all = NAV_GROUPS.flatMap((group) => group.items.map((item) => item.href));
-        for (const missing of ['/lots', '/deliveries', '/sales-invoices']) assert.equal(all.includes(missing), false, `${missing} has no page yet`);
+        for (const missing of ['/lots', '/deliveries']) assert.equal(all.includes(missing), false, `${missing} has no page yet`);
     });
 
     test('"Oud" is gone: no old screen is in the menu and an old screen has no active menu item', () => {

@@ -26,6 +26,7 @@ const PATHS: Readonly<Record<string, string>> = {
     'sales-orders': 'M6 3h12v18H6zM9 8h6M9 12h6M9 16h4',
     'direct-trade': 'M4 8h14M14 4l4 4-4 4M20 16H6M10 12l-4 4 4 4',
     'mail-drafts': 'M3 6h18v12H3zM3 6l9 7 9-7',
+    'sales-invoices': 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3',
     relations: 'M9 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM2.5 20a6.5 6.5 0 0113 0M16 4.5a3.5 3.5 0 010 6.5M18 14a5.5 5.5 0 013.5 6',
     articles: 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM4 7.5l8 4.5 8-4.5M12 12v9',
     certificates: 'M12 3a6 6 0 1 1 0 12a6 6 0 0 1 0-12zM9.5 9l1.8 1.8L14.8 7.5M8.5 14.2L7 21l5-2.5 5 2.5-1.5-6.8',
