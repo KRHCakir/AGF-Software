@@ -15,7 +15,7 @@ export interface ChosenLot { partijId: number; number: string }
 // Feedback 22 november: de partijkeuze. Typen (ook zonder I-, streepjes of spaties) of de lijst openen (pijltje omlaag); per partij het vrije
 // aantal, maat, kleur, herkomst, locatie en ontvangstdatum, de oudste eerst. Pijltjes kiezen, Enter neemt de partij, Escape sluit. Leeg
 // laten = de oudste partij eerst (FIFO). Een houdbaarheidsdatum bestaat nog niet. Op een smal scherm staan de kenmerken onder het nummer.
-export default function LotPicker({ productVariantId, unit, value, onChange, disabled = false, id, label, hint, dataTour, exclude = null, onPendingChange }: {
+export default function LotPicker({ productVariantId, unit, value, onChange, disabled = false, id, label, hint, dataTour, exclude = null, onPendingChange, required = false, describedBy, onTabKey }: {
     productVariantId: number | null;
     unit: string;
     value: ChosenLot | null;
@@ -29,6 +29,11 @@ export default function LotPicker({ productVariantId, unit, value, onChange, dis
     exclude?: number | null;
     // Meldt of er tekst staat die (nog) niet als partij is vastgelegd, zodat het formulier opslaan kan blokkeren.
     onPendingChange?: (pending: boolean) => void;
+    // Verkoopfactuur 1: een verplichte partij (directe factuur): geen "leeg = oudste eerst", wel aria-required en -invalid via describedBy.
+    required?: boolean;
+    describedBy?: string;
+    // Tab (zonder Shift) uit het veld: voor de regelcomponent, die daar een nieuwe regel kan maken.
+    onTabKey?: (event: KeyboardEvent<HTMLInputElement>) => void;
 }) {
     const { t, locale } = useTranslation();
     const [text, setText] = useState(value?.number ?? '');
@@ -82,6 +87,7 @@ export default function LotPicker({ productVariantId, unit, value, onChange, dis
         if (event.key === 'ArrowDown') { event.preventDefault(); setOpen(true); setActive((n) => Math.min(n + (open ? 1 : 0), Math.max(0, shown.length - 1))); }
         else if (event.key === 'ArrowUp') { event.preventDefault(); setActive((n) => Math.max(0, n - 1)); }
         else if (event.key === 'Escape' && open) { event.preventDefault(); setOpen(false); }
+        else if (event.key === 'Tab' && !event.shiftKey) onTabKey?.(event);
         else if (event.key === 'Enter') {
             // Enter mag in een partijkeuze nooit het formulier verzenden.
             event.preventDefault();
@@ -114,7 +120,8 @@ export default function LotPicker({ productVariantId, unit, value, onChange, dis
             <input ref={input} id={id} value={text} data-tour={dataTour ? `${dataTour}-input` : undefined} disabled={disabled || productVariantId === null} autoComplete="off" role="combobox" aria-expanded={open} aria-controls={listId}
                 aria-autocomplete="list" aria-activedescendant={open && shown[active] ? `${listId}-${active}` : undefined}
                 onChange={(event) => { setText(event.target.value); setOpen(true); setActive(0); if (value !== null && event.target.value !== known) { keepText.current = true; onChange(null); } }}
-                onFocus={() => setActive(0)} onKeyDown={onKeyDown} onBlur={onBlur} placeholder={t('lot_picker_placeholder')} className={`${inputClass} font-mono`} />
+                onFocus={() => setActive(0)} onKeyDown={onKeyDown} onBlur={onBlur} placeholder={t(required ? 'lot_picker_placeholder_required' : 'lot_picker_placeholder')}
+                aria-required={required || undefined} aria-invalid={describedBy ? true : undefined} aria-describedby={describedBy} className={`${inputClass} font-mono`} />
             {hint && <span className="block text-xs text-gray-500">{hint}</span>}
             {failed && <span className="block text-xs text-red-700">{t('lot_picker_failed')}</span>}
             {unknown && !open && <span className="block text-xs text-red-700" role="alert">{t('lot_picker_unknown', { number: text.trim() })}</span>}

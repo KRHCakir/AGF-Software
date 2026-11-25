@@ -42,7 +42,7 @@ const linkButton = 'whitespace-nowrap text-xs font-medium text-blue-800 underlin
 // Korting, Btw, GGN; onder de tabel de btw per tarief. Dezelfde component voor de verkooporder: zonder GGN-kolom (`withGgn` onwaar) is
 // Btw het laatste veld, `extraAmounts` telt emballage mee in de btw, en `tourPrefix` geeft de rondleiding haar eigen namen.
 export default function PurchaseOrderLines<D extends PurchaseLineDraft = PurchaseLineDraft>({ lines, rows, products, variantOf, locked, isDirect, errors, onChange, onAdd, onRemove, onNewArticle, productExtra, limits = () => lineLimits(undefined),
-    currency = null, rate = null, ggnProposalOf = () => undefined, withGgn = true, extraAmounts = [], tourPrefix = 'supply-line', testId = 'purchase-lines', showAmounts = true, fields = PURCHASE_LINE_FIELDS, lineExtra = () => null }: {
+    currency = null, rate = null, ggnProposalOf = () => undefined, withGgn = true, extraAmounts = [], tourPrefix = 'supply-line', testId = 'purchase-lines', showAmounts = true, fields = PURCHASE_LINE_FIELDS, lineExtra = () => null, extraIsLast = false }: {
     lines: D[];
     // De veldnamen van de server in ids en foutsleutels (lines[i].expectedQuantity bij inkoop, lines[i].quantity bij verkoop).
     fields?: LineFieldNames;
@@ -68,7 +68,10 @@ export default function PurchaseOrderLines<D extends PurchaseLineDraft = Purchas
     productExtra: (line: D, index: number) => ReactNode;
     // Extra inhoud onder de regel, over de hele breedte (de verkooporder: stand en bron). Staat in de Tab-volgorde ná de regel, zodat Tab
     // vanuit het artikel naar Aantal gaat.
-    lineExtra?: (line: D, index: number) => ReactNode;
+    // De tweede rij onder de regel; onLastKey: geef dit door aan het laatste veld daarin als extraIsLast (Tab maakt dan daar de nieuwe regel).
+    lineExtra?: (line: D, index: number, onLastKey: (event: KeyboardEvent<HTMLElement>) => void) => ReactNode;
+    // Verkoopfactuur 1: het laatste veld van een regel staat in lineExtra (de verplichte partijkeuze), niet bij Btw.
+    extraIsLast?: boolean;
     limits?: (key: string) => LineLimits;
     ggnProposalOf?: (line: D) => GgnProposal | undefined;
 }) {
@@ -140,14 +143,14 @@ export default function PurchaseOrderLines<D extends PurchaseLineDraft = Purchas
                         const row = rows[index];
                         const variant = line.productVariantId === '' ? undefined : variantOf(Number(line.productVariantId));
                         const editingGross = line.grossKgEntered === true || grossOpen.has(line.key);
-                        const last = isDirect ? 'lot' : withGgn ? 'ggn' : 'vat';
+                        const last = extraIsLast ? 'extra' : isDirect ? 'lot' : withGgn ? 'ggn' : 'vat';
                         const proposal = line.productVariantId === '' ? undefined : ggnProposalOf(line);
                         const hint = ggnHint(line, proposal);
                         const problem = ggnProblem(line.ggn ?? '');
                         // De keuzelijst staat er bij meer treffers, zolang er geen eigen nummer (buiten de lijst) is ingevuld; dan is zij het laatste veld.
                         const choosing = proposal?.kind === 'Many' && (normalizeGgn(line.ggn ?? '') === '' || proposal.options.some((o) => o.ggn === normalizeGgn(line.ggn ?? '')));
                         const limit = limits(line.key);
-                        const extra = lineExtra(line, index);
+                        const extra = lineExtra(line, index, (event) => onLastField(event, index));
                         return (
                             <Fragment key={line.key}>
                             <tr className={purchaseLineRowClass(index)} data-tour={tourPrefix} data-tour-key={index} onKeyDown={(event) => onRowKey(event, line, row, index)}>
