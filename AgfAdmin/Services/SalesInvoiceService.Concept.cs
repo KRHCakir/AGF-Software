@@ -32,20 +32,22 @@ namespace AgfAdmin.Services
                 return ServiceResult<SalesInvoiceDto>.Validation(errors);
             }
 
-            var requested = string.Join(",", deliveryIds);
             for (var attempt = 1; ; attempt++)
             {
-                var replay = await db.Invoices.AsNoTracking().Where(i => i.RequestId == request.RequestId).Select(i => new { i.Id, i.Kind, i.RequestDeliveryIds }).SingleOrDefaultAsync(cancellationToken);
+                var replay = await db.Invoices.AsNoTracking().Where(i => i.RequestId == request.RequestId).Select(i => new { i.Id, i.Kind }).SingleOrDefaultAsync(cancellationToken);
                 if (replay != null)
                 {
-                    // Vergelijk met de bewaarde aanvraag, niet met de wijzigbare regels van het concept.
-                    return replay.Kind == SalesInvoiceRules.KindDelivery && replay.RequestDeliveryIds == requested
+                    // Een herhaling als alle gevraagde leveringen op die factuur staan (ook op een weggehaalde regel): na een netwerkfout
+                    // kan het concept al bijgewerkt zijn, bijvoorbeeld met een levering erbij. Zonder extra kolom of migratie.
+                    var onInvoice = (await db.InvoiceLines.AsNoTracking().Where(l => l.InvoiceId == replay.Id && l.SalesDeliveryId != null)
+                        .Select(l => l.SalesDeliveryId.Value).ToListAsync(cancellationToken)).ToHashSet();
+                    return replay.Kind == SalesInvoiceRules.KindDelivery && deliveryIds.All(onInvoice.Contains)
                         ? ServiceResult<SalesInvoiceDto>.Ok(await DtoAsync(replay.Id, cancellationToken))
                         : ServiceResult<SalesInvoiceDto>.Conflict($"RequestId {request.RequestId} was already used for another invoice.");
                 }
                 var invoice = new Invoice
                 {
-                    Kind = SalesInvoiceRules.KindDelivery, Status = SalesInvoiceRules.StatusConcept, RequestId = request.RequestId, RequestDeliveryIds = requested,
+                    Kind = SalesInvoiceRules.KindDelivery, Status = SalesInvoiceRules.StatusConcept, RequestId = request.RequestId,
                     CreatedBy = Actor(), CreatedAt = DateTime.UtcNow, InvoiceDate = DateTime.UtcNow, PaymentStatus = "Pending"
                 };
                 var refused = await AddDeliveriesAsync(invoice, deliveryIds, "deliveryIds", cancellationToken);

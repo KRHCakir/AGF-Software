@@ -42,8 +42,6 @@ namespace AgfAdmin.Models
         public string? Kind { get; set; }
         // Idempotentiesleutel van het aanmaakcommando (uniek).
         public Guid? RequestId { get; set; }
-        // De leveringen van het aanmaakcommando (gesorteerd, komma-gescheiden), om een herhaling te herkennen los van de wijzigbare regels.
-        public string? RequestDeliveryIds { get; set; }
         // Doorlopend nummer per jaar, alleen bij Definitief (uniek samen).
         public int? InvoiceYear { get; set; }
         public int? InvoiceSequence { get; set; }

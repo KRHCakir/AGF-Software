@@ -717,7 +717,6 @@ namespace AgfAdmin.Data
                 b.Property(i => i.CreatedBy).HasMaxLength(SalesInvoiceRules.MaxActorLength);
                 b.Property(i => i.DiscardedBy).HasMaxLength(SalesInvoiceRules.MaxActorLength);
                 b.Property(i => i.DiscardReason).HasMaxLength(SalesInvoiceRules.MaxReasonLength);
-                b.Property(i => i.RequestDeliveryIds).HasMaxLength(1000);
                 b.Property(i => i.CustomerAddress).HasMaxLength(SalesInvoiceRules.MaxAddressLength);
                 b.Property(i => i.CustomerVatNumber).HasMaxLength(50);
                 b.Property(i => i.Version).IsConcurrencyToken();
