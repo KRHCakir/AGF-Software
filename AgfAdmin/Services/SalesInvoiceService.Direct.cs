@@ -46,10 +46,20 @@ namespace AgfAdmin.Services
             {
                 return ServiceResult<SalesInvoiceDto>.Validation(errors);
             }
-            var replay = await db.Invoices.AsNoTracking().Where(i => i.RequestId == request.RequestId).Select(i => new { i.Id, i.Kind, i.CustomerId }).SingleOrDefaultAsync(cancellationToken);
+            // Een herhaling is precies dezelfde aanvraag (klant, leverdatum, referentie, nummer en alle regels), via de vingerafdruk.
+            var fingerprint = SalesInvoiceRules.Fingerprint(new
+            {
+                kind = SalesInvoiceRules.KindDirect, request.CustomerId, request.DeliveryDate, reference, lotNumber = request.LotNumber?.Trim(),
+                lines = lines.Select(l => l == null ? null : new
+                {
+                    l.LineKind, l.ProductVariantId, l.PartijId, l.CostArticleId, description = l.Description?.Trim(), l.Quantity, l.Unit, l.UnitPrice,
+                    l.DiscountPercentage, l.VatPercentage, l.RevenueTypeId
+                })
+            });
+            var replay = await db.Invoices.AsNoTracking().Where(i => i.RequestId == request.RequestId).Select(i => new { i.Id, i.RequestFingerprint }).SingleOrDefaultAsync(cancellationToken);
             if (replay != null)
             {
-                return replay.Kind == SalesInvoiceRules.KindDirect && replay.CustomerId == request.CustomerId
+                return replay.RequestFingerprint == fingerprint
                     ? ServiceResult<SalesInvoiceDto>.Ok(await DtoAsync(replay.Id, cancellationToken))
                     : ServiceResult<SalesInvoiceDto>.Conflict($"RequestId {request.RequestId} was already used for another invoice.");
             }
@@ -75,7 +85,8 @@ namespace AgfAdmin.Services
                 var now = DateTime.UtcNow;
                 var invoice = new Invoice
                 {
-                    Kind = SalesInvoiceRules.KindDirect, Status = SalesInvoiceRules.StatusConcept, RequestId = request.RequestId, CreatedBy = Actor(), CreatedAt = now,
+                    Kind = SalesInvoiceRules.KindDirect, Status = SalesInvoiceRules.StatusConcept, RequestId = request.RequestId, RequestFingerprint = fingerprint,
+                    CreatedBy = Actor(), CreatedAt = now,
                     CustomerId = customer.Id, CustomCustomerName = customer.Name, InvoiceDate = now, PaymentStatus = "Pending", ReferenceNumber = reference,
                     DeliveryDate = DeliveryDateOf(request.DeliveryDate, now), BatchNumber = lot.Partij.Number, SalesPartij = lot.Partij, UpdatedAt = now
                 };
