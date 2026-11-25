@@ -109,15 +109,17 @@ namespace AgfAdmin.Data
             var firstDeliveries = orderIds.Count == 0 ? new Dictionary<int, int>()
                 : (await ToListAsync(db.SalesDeliveries.AsNoTracking().Where(x => orderIds.Contains(x.SalesOrderId) && x.Sequence == 1).Select(x => new { x.SalesOrderId, x.Id }), async, cancellationToken))
                     .ToDictionary(x => x.SalesOrderId, x => x.Id);
-            // Alle orderregels die in rows voorkomen, niet alleen de geraakte: een levering kan al andere gefactureerde regels hebben.
-            var checkedLineIds = rows.Where(r => r.OrderLineId != null).Select(r => r.OrderLineId.Value).Distinct().ToList();
+            var checkedLineIds = touched.Where(e => e.Entity.SalesOrderLineId != null).Select(e => e.Entity.SalesOrderLineId.Value).Distinct().ToList();
             var consumed = checkedLineIds.Count == 0 ? new List<(int LineId, int? DeliveryId, int OrderId, decimal Quantity)>()
                 : (await ToListAsync(db.StockReservations.AsNoTracking()
                     .Where(r => r.SalesOrderLineId != null && checkedLineIds.Contains(r.SalesOrderLineId.Value) && r.Status == ReservationRules.StatusConsumed)
                     .Select(r => new { LineId = r.SalesOrderLineId.Value, r.SalesDeliveryId, r.SalesOrderLine.SalesOrderId, r.Quantity }), async, cancellationToken))
                     .Select(r => (r.LineId, DeliveryId: r.SalesDeliveryId, OrderId: r.SalesOrderId, r.Quantity)).ToList();
 
-            foreach (var key in rows.Where(r => r.DeliveryId != null && deliveryIds.Contains(r.DeliveryId.Value)).Select(r => (Delivery: r.DeliveryId.Value, Line: r.OrderLineId.Value)).Distinct())
+            // Alleen de geraakte combinaties van levering en orderregel (met alle opgeslagen en gewijzigde bedragen erbij), niet andere regels van dezelfde levering.
+            var touchedKeys = touched.Where(e => e.Entity.SalesDeliveryId != null && e.Entity.SalesOrderLineId != null)
+                .Select(e => (Delivery: e.Entity.SalesDeliveryId.Value, Line: e.Entity.SalesOrderLineId.Value)).Distinct().ToList();
+            foreach (var key in touchedKeys)
             {
                 var invoiced = rows.Where(r => r.DeliveryId == key.Delivery && r.OrderLineId == key.Line).Sum(r => r.Quantity);
                 var delivered = consumed.Where(c => c.LineId == key.Line
