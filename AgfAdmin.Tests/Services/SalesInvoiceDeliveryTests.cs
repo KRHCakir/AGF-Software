@@ -243,4 +243,30 @@ public sealed class SalesInvoiceDeliveryTests : IDisposable
         await using var db = _factory.CreateContext();
         Assert.True((await new SalesInvoiceService(db).GetAsync(concept.Id)).Value.Stale);
     }
+
+    // Gevonden door de AI-review: regel 45 controleerde ook de andere orderregels van dezelfde levering, zonder hun geleverde aantal te
+    // kennen; en de werklijst miste de productnaam in de omschrijving.
+    [Fact]
+    public async Task Two_Order_Lines_Of_One_Delivery_Go_On_Separate_Invoices_And_The_Worklist_Names_The_Product()
+    {
+        var seed = await SalesTestData.SeedAsync(_factory);
+        var (orderId, box, colli) = await SalesTestData.SeedOrderAsync(_factory, seed, boxQuantity: 10m, colliQuantity: 5m);
+        var boxReservation = await SalesInvoiceTestData.ReserveAsync(_factory, orderId, box, seed.ApprovedBox, 10m, 40m);
+        var colliReservation = await SalesInvoiceTestData.ReserveAsync(_factory, orderId, colli, seed.ApprovedColli, 5m, 27.5m, "colli");
+        await SalesTestData.ConsumeAsync(_factory, boxReservation);
+        await SalesTestData.ConsumeAsync(_factory, colliReservation);
+        int delivery;
+        await using (var db = _factory.CreateContext())
+        {
+            delivery = await db.SalesDeliveries.Where(d => d.SalesOrderId == orderId).Select(d => d.Id).SingleAsync();
+            var worklist = Assert.Single(await new SalesInvoiceService(db).ToInvoiceAsync());
+            Assert.All(worklist.Deliveries.Single().Lines, l => Assert.StartsWith("Avocado Hass", l.Description));
+        }
+        var first = (await SalesInvoiceTestData.FromDeliveriesAsync(_factory, Guid.NewGuid(), delivery)).Value;
+        var boxOnly = await UpdateAsync(first, Keep(first.Lines[0]), new UpdateSalesInvoiceLineDto { Id = first.Lines[1].Id, Remove = true });
+        Assert.Equal(ServiceResultStatus.Ok, boxOnly.Status);
+        var second = await SalesInvoiceTestData.FromDeliveriesAsync(_factory, Guid.NewGuid(), delivery);
+        Assert.Equal(ServiceResultStatus.Created, second.Status);
+        Assert.Equal((colli, 5m), (second.Value.Lines.Single().SalesOrderLineId.Value, second.Value.Lines.Single().Quantity));
+    }
 }
