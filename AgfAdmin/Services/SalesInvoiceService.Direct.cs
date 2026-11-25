@@ -275,12 +275,17 @@ namespace AgfAdmin.Services
             var contents = await db.PalletContentLines.Include(c => c.Pallet).Where(c => ids.Contains(c.Id)).ToDictionaryAsync(c => c.Id, cancellationToken);
             // Koppel de bij het plannen gelezen versie aan de concurrencycontrole: heeft een andere aanvraag de regel sindsdien gewijzigd,
             // dan faalt de save met een concurrencyfout (409) in plaats van op verouderde beschikbaarheid door te gaan.
+            // Komt een inhoudsregel in meerdere plannen voor, dan geldt de eerst gelezen versie: heeft een andere transactie de regel tussen
+            // twee planningen gewijzigd, dan wijkt die oudste versie af van de opgeslagen versie en faalt de save (409) in plaats van dat een
+            // later gelezen versie de verouderde eerste planning goedkeurt.
+            var checkedVersions = new Dictionary<int, int>();
             foreach (var plan in planned)
             {
                 if (plan.Versions == null) continue;
                 foreach (var a in plan.Allocations)
                 {
-                    if (contents.TryGetValue(a.ContentId, out var content) && plan.Versions.TryGetValue(a.ContentId, out var version))
+                    if (contents.TryGetValue(a.ContentId, out var content) && plan.Versions.TryGetValue(a.ContentId, out var version)
+                        && checkedVersions.TryAdd(a.ContentId, version))
                     {
                         db.Entry(content).Property(c => c.Version).OriginalValue = version;
                     }
