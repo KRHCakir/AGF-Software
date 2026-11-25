@@ -58,4 +58,10 @@ public static class SalesInvoiceTestData
         if (result.Status != ServiceResultStatus.Created) throw new InvalidOperationException($"Reservation failed: {result.Status}");
         return result.Value.Id;
     }
+
+    public static async Task<ServiceResult<SalesInvoiceDto>> FromDeliveriesAsync(SqliteAppDbContextFactory factory, Guid requestId, params int[] deliveryIds)
+    {
+        await using var db = factory.CreateContext();
+        return await new SalesInvoiceService(db).CreateFromDeliveriesAsync(new CreateInvoiceFromDeliveriesDto { RequestId = requestId, DeliveryIds = deliveryIds.ToList() });
+    }
 }

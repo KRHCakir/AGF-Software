@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace AgfAdmin.Controllers
 {
-    // Verkoopfactuur 1: verkoopfacturen onder Verkoop. Lezen en wat er nog te factureren is; het concept maken en bijwerken volgt.
+    // Verkoopfactuur 1: verkoopfacturen onder Verkoop. Concept uit leveringen, bijwerken, weggooien, lezen en wat er nog te factureren is.
     // De oude route /api/SalesInvoice blijft voor de oude facturen.
     [Authorize(Policy = Permissions.Sales)]
     [ApiController]
@@ -17,6 +17,23 @@ namespace AgfAdmin.Controllers
 
         [HttpGet("{id:int}")]
         public async Task<IActionResult> Get(int id) => this.ToActionResult(await invoices.GetAsync(id, Aborted));
+
+        // 201 met het concept, 200 bij herhaling van dezelfde aanvraag, 400 (andere klant), 404, 409 (niets meer te factureren).
+        [HttpPost("from-deliveries")]
+        public async Task<IActionResult> FromDeliveries([FromBody] CreateInvoiceFromDeliveriesDto request) =>
+            this.ToActionResult(await invoices.CreateFromDeliveriesAsync(request, Aborted));
+
+        [HttpPost("{id:int}/deliveries")]
+        public async Task<IActionResult> AddDeliveries(int id, [FromBody] AddInvoiceDeliveriesDto request) =>
+            this.ToActionResult(await invoices.AddDeliveriesAsync(id, request, Aborted));
+
+        [HttpPut("{id:int}")]
+        public async Task<IActionResult> Update(int id, [FromBody] UpdateSalesInvoiceDto request) =>
+            this.ToActionResult(await invoices.UpdateAsync(id, request, Aborted));
+
+        [HttpPost("{id:int}/discard")]
+        public async Task<IActionResult> Discard(int id, [FromBody] DiscardSalesInvoiceDto request) =>
+            this.ToActionResult(await invoices.DiscardAsync(id, request, Aborted));
 
         // De werklijst Nog te factureren: leveringen met een rest, per klant.
         [HttpGet("to-invoice")]
