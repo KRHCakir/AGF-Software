@@ -123,8 +123,8 @@ namespace AgfAdmin.Services
             var extras = await ExtraStatesAsync(orderIds, null, cancellationToken);
             var lineIds = states.Select(s => s.OrderLineId).Distinct().ToList();
             var lines = await db.SalesOrderLines.AsNoTracking().Where(l => lineIds.Contains(l.Id))
-                .Select(l => new { l.Id, l.Unit, l.ProductVariant }).ToListAsync(cancellationToken);
-            var lineInfo = lines.ToDictionary(l => l.Id, l => (Description: SalesInvoiceRules.Describe(l.ProductVariant), l.Unit));
+                .Select(l => new { l.Id, l.Unit, l.ProductVariant, ProductName = l.ProductVariant.Product.Name }).ToListAsync(cancellationToken);
+            var lineInfo = lines.ToDictionary(l => l.Id, l => (Description: SalesInvoiceRules.Describe(l.ProductVariant, l.ProductName), l.Unit));
             var deliveryIds = deliveries.Select(d => d.Id).ToList();
             var invoices = await db.InvoiceLines.AsNoTracking()
                 .Where(l => l.SalesDeliveryId != null && deliveryIds.Contains(l.SalesDeliveryId.Value) && l.RemovedAt == null && l.Invoice.Kind == SalesInvoiceRules.KindDelivery)
