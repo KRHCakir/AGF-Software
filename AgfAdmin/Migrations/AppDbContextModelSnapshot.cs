@@ -3050,6 +3050,10 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("ReferenceNumber")
                         .HasColumnType("text");
 
+                    b.Property<string>("RequestDeliveryIds")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
                     b.Property<Guid?>("RequestId")
                         .HasColumnType("uuid");
 

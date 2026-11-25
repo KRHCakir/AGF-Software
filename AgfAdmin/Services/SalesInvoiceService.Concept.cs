@@ -32,31 +32,46 @@ namespace AgfAdmin.Services
                 return ServiceResult<SalesInvoiceDto>.Validation(errors);
             }
 
+            var requested = string.Join(",", deliveryIds);
             for (var attempt = 1; ; attempt++)
             {
-                var replay = await db.Invoices.AsNoTracking().Where(i => i.RequestId == request.RequestId).Select(i => new { i.Id, i.Kind }).SingleOrDefaultAsync(cancellationToken);
+                var replay = await db.Invoices.AsNoTracking().Where(i => i.RequestId == request.RequestId).Select(i => new { i.Id, i.Kind, i.RequestDeliveryIds }).SingleOrDefaultAsync(cancellationToken);
                 if (replay != null)
                 {
-                    var replayed = (await db.InvoiceLines.AsNoTracking().Where(l => l.InvoiceId == replay.Id && l.SalesDeliveryId != null)
-                        .Select(l => l.SalesDeliveryId.Value).ToListAsync(cancellationToken)).Distinct().OrderBy(d => d).ToList();
-                    return replay.Kind == SalesInvoiceRules.KindDelivery && replayed.SequenceEqual(deliveryIds)
+                    // Vergelijk met de bewaarde aanvraag, niet met de wijzigbare regels van het concept.
+                    return replay.Kind == SalesInvoiceRules.KindDelivery && replay.RequestDeliveryIds == requested
                         ? ServiceResult<SalesInvoiceDto>.Ok(await DtoAsync(replay.Id, cancellationToken))
                         : ServiceResult<SalesInvoiceDto>.Conflict($"RequestId {request.RequestId} was already used for another invoice.");
                 }
                 var invoice = new Invoice
                 {
-                    Kind = SalesInvoiceRules.KindDelivery, Status = SalesInvoiceRules.StatusConcept, RequestId = request.RequestId, CreatedBy = Actor(),
-                    CreatedAt = DateTime.UtcNow, InvoiceDate = DateTime.UtcNow, PaymentStatus = "Pending"
+                    Kind = SalesInvoiceRules.KindDelivery, Status = SalesInvoiceRules.StatusConcept, RequestId = request.RequestId, RequestDeliveryIds = requested,
+                    CreatedBy = Actor(), CreatedAt = DateTime.UtcNow, InvoiceDate = DateTime.UtcNow, PaymentStatus = "Pending"
                 };
                 var refused = await AddDeliveriesAsync(invoice, deliveryIds, "deliveryIds", cancellationToken);
                 if (refused != null)
                 {
+                    // Een gelijktijdige identieke aanvraag kan de leveringen net gefactureerd hebben: dan is dit een herhaling, geen conflict.
+                    if (refused.Status == ServiceResultStatus.Conflict && attempt < 3 && await RequestIdExistsAsync(request.RequestId.Value, cancellationToken))
+                    {
+                        db.ChangeTracker.Clear();
+                        continue;
+                    }
                     return refused;
                 }
                 db.Invoices.Add(invoice);
                 try
                 {
-                    return await TrySaveAsync(invoice, cancellationToken) ?? ServiceResult<SalesInvoiceDto>.Created(await DtoAsync(invoice.Id, cancellationToken));
+                    var saved = await TrySaveAsync(invoice, cancellationToken);
+                    if (saved == null)
+                    {
+                        return ServiceResult<SalesInvoiceDto>.Created(await DtoAsync(invoice.Id, cancellationToken));
+                    }
+                    if (saved.Status == ServiceResultStatus.Conflict && attempt < 3 && await RequestIdExistsAsync(request.RequestId.Value, cancellationToken))
+                    {
+                        continue; // de andere identieke aanvraag was eerst: de herhaling bovenaan geeft die factuur terug
+                    }
+                    return saved;
                 }
                 catch (DbUpdateException exception) when (DbErrors.IsUniqueViolation(exception) && attempt < 3)
                 {
@@ -65,6 +80,9 @@ namespace AgfAdmin.Services
                 }
             }
         }
+
+        private Task<bool> RequestIdExistsAsync(Guid requestId, CancellationToken cancellationToken) =>
+            db.Invoices.AsNoTracking().AnyAsync(i => i.RequestId == requestId, cancellationToken);
 
         // Leveringen bij een bestaand concept: de rest per orderregel komt erbij (bij een regel die er al staat, wordt het aantal verhoogd).
         public async Task<ServiceResult<SalesInvoiceDto>> AddDeliveriesAsync(int id, AddInvoiceDeliveriesDto request, CancellationToken cancellationToken = default)
@@ -159,11 +177,7 @@ namespace AgfAdmin.Services
                 var existing = current.FirstOrDefault(l => extra.Packaging ? l.SalesOrderPackagingLineId == extra.LineId : l.SalesOrderServiceLineId == extra.LineId);
                 if (existing != null)
                 {
-                    if (existing.Quantity != extra.Rest)
-                    {
-                        existing.Quantity = extra.Rest;
-                        changed = true;
-                    }
+                    // Een dienst- of emballageregel die al op het concept staat, is misschien bewust aangepast: laat hem ongemoeid.
                     continue;
                 }
                 if (extra.Packaging)
