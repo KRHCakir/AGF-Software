@@ -3584,5 +3584,6 @@
   "si_direct_add_service": "Vrije regel",
   "si_direct_save": "Concept opslaan",
   "si_revenue_type": "Omzetsoort",
-  "lot_picker_placeholder_required": "Partijnummer (verplicht)"
+  "lot_picker_placeholder_required": "Partijnummer (verplicht)",
+  "si_direct_earlier_saved": "Een eerdere poging is mogelijk al opgeslagen als concept, met de gegevens van toen. Kijk eerst in Verkoopfacturen; opnieuw opslaan maakt een nieuw concept."
 }
