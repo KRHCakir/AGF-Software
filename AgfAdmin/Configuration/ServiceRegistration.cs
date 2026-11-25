@@ -92,6 +92,7 @@ namespace AgfAdmin.Configuration
             services.AddScoped<IAvailabilityService, AvailabilityService>();
             services.AddScoped<ISalesOrderService, SalesOrderService>();
             services.AddScoped<SalesDeliveryService>();
+            services.AddScoped<SalesInvoiceService>();
             services.AddScoped<IStockReservationService, StockReservationService>();
             services.AddScoped<ISalesDispatchService, SalesDispatchService>();
             services.AddScoped<ISalesDispatchCorrectionService, SalesDispatchCorrectionService>();
