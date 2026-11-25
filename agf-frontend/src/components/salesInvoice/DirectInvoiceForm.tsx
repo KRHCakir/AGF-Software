@@ -117,7 +117,7 @@ export default function DirectInvoiceForm({ customers, products, serviceArticles
     const lineErrors = (key: string) => (message(key) ? [message(key)!] : undefined);
     // Serverfouten zonder veld in het formulier (bijvoorbeeld korting of prijs van een productregel) tonen we hier, zodat opslaan nooit stil mislukt.
     const unshownErrors = failure ? Object.keys(errors).filter((key) => !isShownFormKey(key)).map((key) => message(key)!) : [];
-    const amounts =purchaseLineTotals(rows.filter((row, index) => lines[index].productVariantId !== ''), serviceDraftAmounts(services)).amounts;
+    const amounts = purchaseLineTotals(rows.filter((row, index) => lines[index].productVariantId !== ''), serviceDraftAmounts(services)).amounts;
 
     return (
         <form className="space-y-4 rounded-md border border-gray-200 bg-white p-3" data-testid="si-direct-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
