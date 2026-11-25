@@ -84,7 +84,7 @@ namespace AgfAdmin.Services
         private Task<bool> RequestIdExistsAsync(Guid requestId, CancellationToken cancellationToken) =>
             db.Invoices.AsNoTracking().AnyAsync(i => i.RequestId == requestId, cancellationToken);
 
-        // Leveringen bij een bestaand concept: de rest per orderregel komt erbij (regels die er al staan blijven ongemoeid; dienst- en emballageregels komen alleen mee bij orders met een nieuwe productregel).
+        // Leveringen bij een bestaand concept: de rest per orderregel komt erbij (regels die er al staan blijven ongemoeid; dienst- en emballageregels met een rest komen ook mee zonder nieuwe productregel, behalve als ze bewust van dit concept zijn gehaald).
         public async Task<ServiceResult<SalesInvoiceDto>> AddDeliveriesAsync(int id, AddInvoiceDeliveriesDto request, CancellationToken cancellationToken = default)
         {
             var deliveryIds = (request?.DeliveryIds ?? new List<int>()).Distinct().OrderBy(d => d).ToList();
@@ -144,7 +144,7 @@ namespace AgfAdmin.Services
             var order = deliveries.OrderBy(d => d.OrderNumber, StringComparer.Ordinal).ThenBy(d => d.Sequence).Select(d => d.Id).ToList();
             var sort = invoice.InvoiceLines.Select(l => l.SortOrder).DefaultIfEmpty(-1).Max();
             var changed = false;
-            var newOrderIds = new HashSet<int>(); // orders met een nieuwe productregel: alleen daarvoor komen de extra's mee
+            var newOrderIds = new HashSet<int>(); // orders met een nieuwe productregel
 
             foreach (var state in states.OrderBy(s => order.IndexOf(s.DeliveryId)).ThenBy(s => s.OrderLineId))
             {
@@ -168,12 +168,18 @@ namespace AgfAdmin.Services
                 });
                 changed = true;
             }
-            foreach (var extra in extras.Where(e => newOrderIds.Contains(e.OrderId)))
+            foreach (var extra in extras)
             {
                 var existing = current.FirstOrDefault(l => extra.Packaging ? l.SalesOrderPackagingLineId == extra.LineId : l.SalesOrderServiceLineId == extra.LineId);
                 if (existing != null)
                 {
                     // Een dienst- of emballageregel die al op het concept staat, is misschien bewust aangepast: laat hem ongemoeid.
+                    continue;
+                }
+                if (!newOrderIds.Contains(extra.OrderId)
+                    && invoice.InvoiceLines.Any(l => l.RemovedAt != null && (extra.Packaging ? l.SalesOrderPackagingLineId == extra.LineId : l.SalesOrderServiceLineId == extra.LineId)))
+                {
+                    // Zonder nieuwe productregel komt de rest van een extra mee, behalve als die er bewust van dit concept is afgehaald.
                     continue;
                 }
                 if (extra.Packaging)
