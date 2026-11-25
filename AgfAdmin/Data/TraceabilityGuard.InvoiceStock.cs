@@ -107,10 +107,10 @@ namespace AgfAdmin.Data
             var tracked = db.ChangeTracker.Entries<StockReservation>().Where(e => e.State != EntityState.Deleted && IsInvoiceReservation(e.Entity)).ToList();
             var active = stored.Where(r => tracked.All(e => e.Entity.Id != r.Id)).Select(r => (r.LineId, r.Status))
                 .Concat(tracked.Select(e => (LineId: e.Entity.InvoiceLine?.Id ?? e.Entity.InvoiceLineId ?? 0, e.Entity.Status)))
-                .Where(r => r.Status == ReservationRules.StatusActive).Select(r => r.LineId).ToHashSet();
+                .Where(r => r.Status is ReservationRules.StatusActive or ReservationRules.StatusConsumed).Select(r => r.LineId).ToHashSet();
             foreach (var line in changedLines.Where(l => active.Contains(l.Id)))
             {
-                throw new TraceabilityViolationException($"Invoice line {line.Id} still holds stock: release it before the lot, article, unit or kind of the line changes or the line is removed.");
+                throw new TraceabilityViolationException($"Invoice line {line.Id} holds or has booked out stock: release it before the lot, article, unit or kind of the line changes or the line is removed.");
             }
         }
 
@@ -174,6 +174,10 @@ namespace AgfAdmin.Data
             }
             if (invoice.Status != SalesInvoiceRules.StatusFinal)
             {
+                if (all.Any(r => r.Status == ReservationRules.StatusConsumed))
+                {
+                    throw new TraceabilityViolationException($"Sales invoice {invoice.Id} has stock booked out and cannot be discarded.");
+                }
                 return;
             }
             var storedLines = await ToListAsync(db.InvoiceLines.AsNoTracking().Where(l => l.InvoiceId == invoice.Id && l.LineKind == SalesInvoiceRules.LineProduct)
