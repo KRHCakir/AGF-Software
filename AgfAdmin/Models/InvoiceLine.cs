@@ -59,5 +59,8 @@ namespace AgfAdmin.Models
         public int SortOrder { get; set; }
         // Uit een concept gehaald: de regel blijft bestaan (reserveringen wijzen ernaar), maar telt nergens meer mee. Nooit terug.
         public DateTime? RemovedAt { get; set; }
+
+        // Reserveringen van een productregel van een directe factuur (regel 46).
+        public ICollection<StockReservation> Reservations { get; set; } = new List<StockReservation>();
     }
 }

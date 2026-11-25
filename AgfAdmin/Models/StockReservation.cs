@@ -12,6 +12,10 @@ namespace AgfAdmin.Models
 
         // Eigenaar in de nieuwe verkoopflow.
         public int? SalesOrderLineId { get; set; }
+        // Verkoopfactuur 1: eigenaar bij een productregel van een directe verkoopfactuur (zonder order). Actief zolang de factuur een concept
+        // is, verbruikt bij Definitief (SalesInvoiceStockLine), vrijgegeven bij weggooien of een gewijzigde regel. Altijd Physical (regel 46).
+        public int? InvoiceLineId { get; set; }
+        public InvoiceLine InvoiceLine { get; set; }
         // Feedback 22 november: de levering (en dus de verkoop-partij) waar deze reservering mee gaat; leeg = de eerste levering van de order.
         // Alleen bij een actieve reservering te verplaatsen, met een auditregel (regel 42).
         public int? SalesDeliveryId { get; set; }

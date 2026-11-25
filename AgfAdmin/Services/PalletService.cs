@@ -871,7 +871,7 @@ namespace AgfAdmin.Services
                 return null;
             }
             var reserved = await _db.StockReservations.AsNoTracking().AnyAsync(r =>
-                r.SalesOrderLineId != null
+                (r.SalesOrderLineId != null || r.InvoiceLineId != null)
                 && r.Status == ReservationRules.StatusActive
                 && r.Source == ReservationRules.SourcePhysical
                 && r.PalletContentLine.PalletId == pallet.Id, cancellationToken);

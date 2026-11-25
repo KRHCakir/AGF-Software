@@ -140,6 +140,9 @@ namespace AgfAdmin.Data
     //    definitief en vervallen nooit meer gewijzigd; regels alleen in een concept en nooit verwijderd; herkomst van een regel vast.
     // 45. nooit meer gefactureerd dan geleverd (zie TraceabilityGuard.SalesInvoiceQuantities.cs): per levering en orderregel, en per dienst-
     //    of emballageregel; de klant van de levering is de klant van de factuur.
+    // 46. voorraad van een directe factuur (zie TraceabilityGuard.InvoiceStock.cs): een factuurreservering alleen op een productregel van een
+    //    concept, uit de partij van die regel; afboeken met een afboekregel; bij Definitief of Vervallen geen actieve reservering meer.
+    //    Regels 5, 6 en 17 tellen factuurreserveringen mee; regel 8 vraagt voor hun afboeking een SalesInvoiceStockLine.
     // Regels 5 t/m 7 en 10 t/m 12 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
     // 9. een verzendcorrectie is in beide richtingen consistent: een reservering gaat alleen Consumed -> Corrected samen met precies één
     //    correctieregel (exacte kopie van de verzendregel), één nieuwe inhoudsregel in quarantaine op dezelfde pallet met dezelfde partij en
@@ -279,6 +282,7 @@ namespace AgfAdmin.Data
             await CheckLineLotsAsync(db, async, cancellationToken);
             await CheckSalesInvoicesAsync(db, async, cancellationToken);
             await CheckSalesInvoiceQuantitiesAsync(db, async, cancellationToken);
+            await CheckInvoiceStockAsync(db, async, cancellationToken);
         }
 
         // ---- Regel 17: afkeuringen van ontvangen inkoop (zie PurchaseOrderService.RejectAsync) ----
@@ -419,9 +423,9 @@ namespace AgfAdmin.Data
 
                 var contentId = entry.Entity.Id;
                 var stored = await ToListAsync(db.StockReservations.AsNoTracking()
-                    .Where(r => r.PalletContentLineId == contentId && r.SalesOrderLineId != null && r.Status == ReservationRules.StatusActive && r.Source == ReservationRules.SourcePhysical)
+                    .Where(r => r.PalletContentLineId == contentId && (r.SalesOrderLineId != null || r.InvoiceLineId != null) && r.Status == ReservationRules.StatusActive && r.Source == ReservationRules.SourcePhysical)
                     .Select(r => new { r.Id, r.Quantity, r.NetWeightKg }), async, cancellationToken);
-                var tracked = db.ChangeTracker.Entries<StockReservation>().Where(e => e.Entity.PalletContentLineId == contentId && e.Entity.SalesOrderLineId != null).ToList();
+                var tracked = db.ChangeTracker.Entries<StockReservation>().Where(e => e.Entity.PalletContentLineId == contentId && (e.Entity.SalesOrderLineId != null || IsInvoiceReservation(e.Entity))).ToList();
                 var active = stored.Where(r => tracked.All(e => e.Entity.Id != r.Id)).Select(r => (r.Quantity, Kg: r.NetWeightKg ?? 0m))
                     .Concat(tracked.Where(e => e.State != EntityState.Deleted && e.Entity.Status == ReservationRules.StatusActive && e.Entity.Source == ReservationRules.SourcePhysical)
                         .Select(e => (e.Entity.Quantity, Kg: e.Entity.NetWeightKg ?? 0m)))
@@ -819,11 +823,12 @@ namespace AgfAdmin.Data
             // aan een Dispatch-mutatie of magazijnverzendregel hangen (die vinden haar dan niet in `consumed` en worden geweigerd).
             var consumed = consumedEntries.Where(e => e.Entity.Source != ReservationRules.SourceDirectTrade).Select(e => e.Entity).ToList();
             var dispatchLines = db.ChangeTracker.Entries<SalesDispatchLine>().Where(e => e.State == EntityState.Added).Select(e => e.Entity).ToList();
+            var invoiceStockLines = db.ChangeTracker.Entries<SalesInvoiceStockLine>().Where(e => e.State == EntityState.Added).Select(e => e.Entity).ToList();
             if (db.ChangeTracker.Entries<StockReservation>().Any(e => e.State == EntityState.Added && e.Entity.Status == ReservationRules.StatusConsumed))
             {
                 throw new TraceabilityViolationException("A reservation can only become Consumed through a dispatch, never be created as Consumed.");
             }
-            if (contentDeltas.Count == 0 && movements.Count == 0 && consumed.Count == 0 && dispatchLines.Count == 0)
+            if (contentDeltas.Count == 0 && movements.Count == 0 && consumed.Count == 0 && dispatchLines.Count == 0 && invoiceStockLines.Count == 0)
             {
                 return;
             }
@@ -864,7 +869,16 @@ namespace AgfAdmin.Data
                 {
                     throw new TraceabilityViolationException($"Reservation {reservation.Id} becomes Consumed without a consumption time.");
                 }
-                if (!dispatchLines.Any(l => l.StockReservation == reservation || l.StockReservationId == reservation.Id))
+                // Verkoopfactuur 1: een reservering van een directe factuur wordt afgeboekt met een afboekregel van die factuur (regel 46),
+                // een reservering van een verkooporder met een verzendregel; nooit andersom.
+                if (IsInvoiceReservation(reservation))
+                {
+                    if (!invoiceStockLines.Any(l => l.StockReservation == reservation || l.StockReservationId == reservation.Id))
+                    {
+                        throw new TraceabilityViolationException($"Reservation {reservation.Id} of a direct invoice is consumed without an invoice stock line.");
+                    }
+                }
+                else if (!dispatchLines.Any(l => l.StockReservation == reservation || l.StockReservationId == reservation.Id))
                 {
                     throw new TraceabilityViolationException($"Reservation {reservation.Id} is consumed without a sales dispatch line.");
                 }
@@ -889,7 +903,8 @@ namespace AgfAdmin.Data
                 }
             }
 
-            await CheckDispatchLinesAsync(db, dispatchLines, consumed, movements, async, cancellationToken);
+            await CheckDispatchLinesAsync(db, dispatchLines, consumed.Where(r => !IsInvoiceReservation(r)).ToList(), movements, async, cancellationToken);
+            await CheckInvoiceStockLinesAsync(db, invoiceStockLines, consumed.Where(IsInvoiceReservation).ToList(), movements, async, cancellationToken);
         }
 
         // Verzendregels: elke nieuwe regel is een exacte kopie van precies één reservering die nu Active -> Consumed gaat, verwijst naar
@@ -1046,6 +1061,12 @@ namespace AgfAdmin.Data
         private static bool IsActiveSalesReservation(StockReservation reservation) =>
             reservation.SalesOrderLineId != null && reservation.Status == ReservationRules.StatusActive;
 
+        // Verkoopfactuur 1: ook een productregel van een directe factuur houdt voorraad vast (regel 46). Regels 5, 6 en 17 tellen beide.
+        private static bool IsInvoiceReservation(StockReservation reservation) => reservation.InvoiceLineId != null || reservation.InvoiceLine != null;
+
+        private static bool IsActiveStockReservation(StockReservation reservation) =>
+            (reservation.SalesOrderLineId != null || IsInvoiceReservation(reservation)) && reservation.Status == ReservationRules.StatusActive;
+
         private static async Task CheckSalesReservationsAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
         {
             foreach (var entry in db.ChangeTracker.Entries<StockReservation>().Where(e => e.State == EntityState.Added && e.Entity.SalesOrderLineId != null))
@@ -1061,7 +1082,7 @@ namespace AgfAdmin.Data
             }
             var added = db.ChangeTracker.Entries<StockReservation>()
                 // Onvolledige rijen (zonder eenheid) laten we over aan de database-checks/FK's; toewijzingen (zonder inhoudsregel) volgen regel 10.
-                .Where(e => e.State == EntityState.Added && IsActiveSalesReservation(e.Entity) && e.Entity.PalletContentLineId != null && e.Entity.Unit != null)
+                .Where(e => e.State == EntityState.Added && IsActiveStockReservation(e.Entity) && e.Entity.PalletContentLineId != null && e.Entity.Unit != null)
                 .Select(e => e.Entity)
                 .ToList();
             if (added.Count == 0)
@@ -1130,7 +1151,7 @@ namespace AgfAdmin.Data
             var stored = await ToListAsync(
                 db.StockReservations.AsNoTracking()
                     .Where(r => r.PalletContentLineId != null && contentIds.Contains(r.PalletContentLineId.Value)
-                        && r.SalesOrderLineId != null && r.Status == ReservationRules.StatusActive)
+                        && (r.SalesOrderLineId != null || r.InvoiceLineId != null) && r.Status == ReservationRules.StatusActive)
                     .Select(r => new { r.Id, ContentId = r.PalletContentLineId!.Value, r.Quantity, r.NetWeightKg }),
                 async, cancellationToken);
 
@@ -1138,7 +1159,7 @@ namespace AgfAdmin.Data
                 .Where(r => !trackedIds.Contains(r.Id))
                 .Select(r => (r.ContentId, r.Quantity, Kg: r.NetWeightKg ?? 0m))
                 .Concat(tracked
-                    .Where(e => e.State != EntityState.Deleted && IsActiveSalesReservation(e.Entity))
+                    .Where(e => e.State != EntityState.Deleted && IsActiveStockReservation(e.Entity))
                     .Select(e => (ContentId: e.Entity.PalletContentLineId!.Value, e.Entity.Quantity, Kg: e.Entity.NetWeightKg ?? 0m)))
                 .GroupBy(r => r.ContentId);
 
