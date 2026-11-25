@@ -31,18 +31,86 @@ namespace AgfAdmin.Data
             var added = db.ChangeTracker.Entries<StockReservation>()
                 .Where(e => e.State == EntityState.Added && IsInvoiceReservation(e.Entity) && e.Entity.Status == ReservationRules.StatusActive)
                 .Select(e => e.Entity).ToList();
-            if (added.Count > 0)
-            {
-                await CheckNewInvoiceReservationsAsync(db, added, async, cancellationToken);
-            }
-
+            var changedLines = db.ChangeTracker.Entries<InvoiceLine>()
+                .Where(e => e.State == EntityState.Modified && e.Entity.Id > 0
+                    && (e.Property(l => l.PartijId).IsModified || e.Property(l => l.ProductVariantId).IsModified || e.Property(l => l.Unit).IsModified
+                        || e.Property(l => l.LineKind).IsModified || e.Property(l => l.RemovedAt).IsModified))
+                .Select(e => e.Entity).ToList();
             var closing = db.ChangeTracker.Entries<Invoice>()
                 .Where(e => e.State == EntityState.Modified && e.Entity.Kind == SalesInvoiceRules.KindDirect && e.Property(i => i.Status).IsModified
                     && e.Entity.Status is SalesInvoiceRules.StatusFinal or SalesInvoiceRules.StatusDiscarded)
                 .Select(e => e.Entity).ToList();
+
+            await LockInvoiceRowsAsync(db, added, closing, changedLines, async, cancellationToken);
+
+            if (changedLines.Count > 0)
+            {
+                await CheckChangedInvoiceLinesAsync(db, changedLines, async, cancellationToken);
+            }
+            if (added.Count > 0)
+            {
+                await CheckNewInvoiceReservationsAsync(db, added, async, cancellationToken);
+            }
             foreach (var invoice in closing)
             {
                 await CheckClosingInvoiceStockAsync(db, invoice, async, cancellationToken);
+            }
+        }
+
+        // Zet de factuurrijen vast (FOR UPDATE, PostgreSQL, binnen de transactie van de schrijfactie) vóór de controles lezen: reserveren, regels
+        // wijzigen en afsluiten van dezelfde factuur wachten zo op elkaar en zien daarna de echte toestand. Vaste volgorde tegen deadlocks.
+        // Zonder transactie zou het slot meteen vervallen; SQLite (tests) serialiseert schrijvers zelf.
+        private static async Task LockInvoiceRowsAsync(AppDbContext db, List<StockReservation> added, List<Invoice> closing, List<InvoiceLine> changedLines, bool async, CancellationToken cancellationToken)
+        {
+            if (!db.Database.IsNpgsql() || db.Database.CurrentTransaction == null)
+            {
+                return;
+            }
+            var ids = closing.Select(i => i.Id).ToList();
+            ids.AddRange(changedLines.Select(l => l.Invoice?.Id ?? l.InvoiceId));
+            var unresolved = new List<int>();
+            foreach (var reservation in added)
+            {
+                var line = reservation.InvoiceLine;
+                if (line != null)
+                {
+                    ids.Add(line.Invoice?.Id ?? line.InvoiceId);
+                }
+                else if (reservation.InvoiceLineId != null)
+                {
+                    unresolved.Add(reservation.InvoiceLineId.Value);
+                }
+            }
+            if (unresolved.Count > 0)
+            {
+                ids.AddRange(await ToListAsync(db.InvoiceLines.AsNoTracking().Where(l => unresolved.Contains(l.Id)).Select(l => l.InvoiceId), async, cancellationToken));
+            }
+            foreach (var id in ids.Where(id => id > 0).Distinct().OrderBy(id => id))
+            {
+                if (async)
+                {
+                    await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Invoices\" WHERE \"Id\" = {id} FOR UPDATE", cancellationToken);
+                }
+                else
+                {
+                    db.Database.ExecuteSqlInterpolated($"SELECT 1 FROM \"Invoices\" WHERE \"Id\" = {id} FOR UPDATE");
+                }
+            }
+        }
+
+        // Een conceptregel met een actieve reservering houdt haar partij, artikel, eenheid en soort: eerst vrijgeven, dan wijzigen.
+        private static async Task CheckChangedInvoiceLinesAsync(AppDbContext db, List<InvoiceLine> changedLines, bool async, CancellationToken cancellationToken)
+        {
+            var ids = changedLines.Select(l => l.Id).Distinct().ToList();
+            var stored = await ToListAsync(db.StockReservations.AsNoTracking().Where(r => r.InvoiceLineId != null && ids.Contains(r.InvoiceLineId.Value))
+                .Select(r => new { r.Id, LineId = r.InvoiceLineId.Value, r.Status }), async, cancellationToken);
+            var tracked = db.ChangeTracker.Entries<StockReservation>().Where(e => e.State != EntityState.Deleted && IsInvoiceReservation(e.Entity)).ToList();
+            var active = stored.Where(r => tracked.All(e => e.Entity.Id != r.Id)).Select(r => (r.LineId, r.Status))
+                .Concat(tracked.Select(e => (LineId: e.Entity.InvoiceLine?.Id ?? e.Entity.InvoiceLineId ?? 0, e.Entity.Status)))
+                .Where(r => r.Status == ReservationRules.StatusActive).Select(r => r.LineId).ToHashSet();
+            foreach (var line in changedLines.Where(l => active.Contains(l.Id)))
+            {
+                throw new TraceabilityViolationException($"Invoice line {line.Id} still holds stock: release it before the lot, article, unit or kind of the line changes or the line is removed.");
             }
         }
 
