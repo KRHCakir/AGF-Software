@@ -158,7 +158,8 @@ SQL
 fi
 
 # Controle: alleen referentietabellen mogen rijen hebben.
-reference='^(__EFMigrationsHistory|Countries|PaymentConditions|CompanySettings|CountryAliases|CostArticles)$'
+# Verkoopfactuur 1: RevenueTypes krijgt via de migratie AddSalesInvoices de standaard omzetsoort "Omzet diensten".
+reference='^(__EFMigrationsHistory|Countries|PaymentConditions|CompanySettings|CountryAliases|CostArticles|RevenueTypes)$'
 unexpected=""
 summary=""
 while read -r table; do

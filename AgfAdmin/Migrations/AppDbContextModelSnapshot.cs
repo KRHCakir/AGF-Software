@@ -2976,11 +2976,23 @@ namespace AgfAdmin.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("CustomCustomerName")
                         .HasColumnType("text");
 
+                    b.Property<string>("CustomerAddress")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
                     b.Property<int?>("CustomerId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("CustomerVatNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<string>("DeliveryAddress")
                         .HasColumnType("text");
@@ -2988,14 +3000,43 @@ namespace AgfAdmin.Migrations
                     b.Property<DateTime?>("DeliveryDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("DiscardReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("DiscardedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DiscardedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<DateTime?>("DueDate")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FinalizedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FinalizedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<DateTime>("InvoiceDate")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("InvoiceNumber")
-                        .HasColumnType("text");
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int?>("InvoiceSequence")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("InvoiceYear")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Kind")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<int?>("OrderId")
                         .HasColumnType("integer");
@@ -3003,8 +3044,18 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("PaymentStatus")
                         .HasColumnType("text");
 
+                    b.Property<int?>("PaymentTermDays")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ReferenceNumber")
                         .HasColumnType("text");
+
+                    b.Property<string>("RequestFingerprint")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid?>("RequestId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("ShippingMethod")
                         .HasColumnType("text");
@@ -3018,8 +3069,15 @@ namespace AgfAdmin.Migrations
                     b.Property<decimal>("TotalAmount")
                         .HasColumnType("numeric");
 
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<decimal>("VATAmount")
                         .HasColumnType("numeric");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
@@ -3027,7 +3085,26 @@ namespace AgfAdmin.Migrations
 
                     b.HasIndex("OrderId");
 
-                    b.ToTable("Invoices");
+                    b.HasIndex("RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("InvoiceYear", "InvoiceSequence")
+                        .IsUnique();
+
+                    b.ToTable("Invoices", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Invoices_Discarded", "\"Kind\" IS NULL OR ((\"Status\" = 'Discarded') = (\"DiscardedAt\" IS NOT NULL AND \"DiscardedBy\" IS NOT NULL))");
+
+                            t.HasCheckConstraint("CK_Invoices_Final_Numbered", "\"Kind\" IS NULL OR (\"Status\" = 'Final' AND \"InvoiceNumber\" IS NOT NULL AND \"InvoiceYear\" IS NOT NULL AND \"InvoiceSequence\" IS NOT NULL AND \"FinalizedAt\" IS NOT NULL AND \"FinalizedBy\" IS NOT NULL AND \"DueDate\" IS NOT NULL AND \"PaymentTermDays\" IS NOT NULL) OR (\"Status\" <> 'Final' AND \"InvoiceNumber\" IS NULL AND \"InvoiceYear\" IS NULL AND \"InvoiceSequence\" IS NULL AND \"FinalizedAt\" IS NULL AND \"FinalizedBy\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_Invoices_Kind_Allowed", "\"Kind\" IS NULL OR \"Kind\" IN ('Delivery', 'Direct')");
+
+                            t.HasCheckConstraint("CK_Invoices_NewModel", "\"Kind\" IS NULL OR (\"Status\" IN ('Concept', 'Final', 'Discarded') AND \"CustomerId\" IS NOT NULL AND \"RequestId\" IS NOT NULL AND \"RequestFingerprint\" IS NOT NULL AND \"CreatedBy\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_Invoices_Sequence_Positive", "\"InvoiceSequence\" IS NULL OR \"InvoiceSequence\" > 0");
+                        });
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.InvoiceLine", b =>
@@ -3038,14 +3115,37 @@ namespace AgfAdmin.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("CostArticleId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
                     b.Property<decimal>("DiscountPercentage")
                         .HasColumnType("numeric");
 
+                    b.Property<string>("Ggn")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<int>("InvoiceId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("LineKind")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<decimal?>("LineNet")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal?>("LineVat")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("LotNumber")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<decimal>("NetWeight")
                         .HasColumnType("numeric");
@@ -3068,13 +3168,34 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("Remarks")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("RemovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("RevenueTypeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SalesDeliveryId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SalesOrderLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SalesOrderPackagingLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SalesOrderServiceLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
                     b.Property<decimal>("TareWeight")
                         .HasColumnType("numeric");
 
                     b.Property<string>("Unit")
                         .HasColumnType("text");
 
-                    b.Property<decimal>("UnitPrice")
+                    b.Property<decimal?>("UnitPrice")
                         .HasColumnType("numeric");
 
                     b.Property<decimal>("VATPercentage")
@@ -3082,13 +3203,40 @@ namespace AgfAdmin.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CostArticleId");
+
                     b.HasIndex("InvoiceId");
 
                     b.HasIndex("PartijId");
 
                     b.HasIndex("ProductVariantId");
 
-                    b.ToTable("InvoiceLine", (string)null);
+                    b.HasIndex("RevenueTypeId");
+
+                    b.HasIndex("SalesDeliveryId");
+
+                    b.HasIndex("SalesOrderLineId");
+
+                    b.HasIndex("SalesOrderPackagingLineId");
+
+                    b.HasIndex("SalesOrderServiceLineId");
+
+                    b.ToTable("InvoiceLine", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_InvoiceLine_DeliverySource", "(\"SalesDeliveryId\" IS NULL) = (\"SalesOrderLineId\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_InvoiceLine_LineKind_Allowed", "\"LineKind\" IS NULL OR \"LineKind\" IN ('Product', 'Service', 'Packaging')");
+
+                            t.HasCheckConstraint("CK_InvoiceLine_Product_Source", "\"LineKind\" IS NULL OR \"LineKind\" <> 'Product' OR (\"ProductVariantId\" IS NOT NULL AND (\"SalesOrderLineId\" IS NOT NULL OR \"PartijId\" IS NOT NULL))");
+
+                            t.HasCheckConstraint("CK_InvoiceLine_Quantity_Positive", "\"LineKind\" IS NULL OR CAST(\"Quantity\" AS NUMERIC) > 0");
+
+                            t.HasCheckConstraint("CK_InvoiceLine_Service_NoStock", "\"LineKind\" IS NULL OR \"LineKind\" = 'Product' OR (\"SalesOrderLineId\" IS NULL AND \"PartijId\" IS NULL AND \"ProductVariantId\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_InvoiceLine_SingleSource", "(CASE WHEN \"SalesOrderLineId\" IS NULL THEN 0 ELSE 1 END) + (CASE WHEN \"SalesOrderServiceLineId\" IS NULL THEN 0 ELSE 1 END) + (CASE WHEN \"SalesOrderPackagingLineId\" IS NULL THEN 0 ELSE 1 END) <= 1");
+
+                            t.HasCheckConstraint("CK_InvoiceLine_Vat_Allowed", "\"LineKind\" IS NULL OR CAST(\"VATPercentage\" AS NUMERIC) IN (0, 9, 21)");
+                        });
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.MailDraft", b =>
@@ -4820,6 +4968,64 @@ namespace AgfAdmin.Migrations
                     b.ToTable("RelationContactChannels", t =>
                         {
                             t.HasCheckConstraint("CK_RelationContactChannels_Kind_Allowed", "\"Kind\" IN ('Phone', 'Email')");
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.RevenueType", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ExternalCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsDefault")
+                        .IsUnique()
+                        .HasFilter("\"IsDefault\"");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("RevenueTypes", t =>
+                        {
+                            t.HasCheckConstraint("CK_RevenueTypes_Default_Active", "NOT \"IsDefault\" OR \"IsActive\"");
+
+                            t.HasCheckConstraint("CK_RevenueTypes_Name_NotBlank", "length(trim(\"Name\")) > 0");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            CreatedAt = new DateTime(2026, 11, 25, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsActive = true,
+                            IsDefault = true,
+                            Name = "Omzet diensten",
+                            Version = 0
                         });
                 });
 
@@ -7173,6 +7379,11 @@ namespace AgfAdmin.Migrations
 
             modelBuilder.Entity("AgfAdmin.Models.InvoiceLine", b =>
                 {
+                    b.HasOne("AgfAdmin.Models.CostArticle", "CostArticle")
+                        .WithMany()
+                        .HasForeignKey("CostArticleId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgfAdmin.Models.Invoice", "Invoice")
                         .WithMany("InvoiceLines")
                         .HasForeignKey("InvoiceId")
@@ -7188,11 +7399,48 @@ namespace AgfAdmin.Migrations
                         .WithMany()
                         .HasForeignKey("ProductVariantId");
 
+                    b.HasOne("AgfAdmin.Models.RevenueType", "RevenueType")
+                        .WithMany()
+                        .HasForeignKey("RevenueTypeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgfAdmin.Models.SalesDelivery", "SalesDelivery")
+                        .WithMany()
+                        .HasForeignKey("SalesDeliveryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgfAdmin.Models.SalesOrderLine", "SalesOrderLine")
+                        .WithMany()
+                        .HasForeignKey("SalesOrderLineId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgfAdmin.Models.SalesOrderPackagingLine", "SalesOrderPackagingLine")
+                        .WithMany()
+                        .HasForeignKey("SalesOrderPackagingLineId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgfAdmin.Models.SalesOrderServiceLine", "SalesOrderServiceLine")
+                        .WithMany()
+                        .HasForeignKey("SalesOrderServiceLineId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CostArticle");
+
                     b.Navigation("Invoice");
 
                     b.Navigation("Partij");
 
                     b.Navigation("ProductVariant");
+
+                    b.Navigation("RevenueType");
+
+                    b.Navigation("SalesDelivery");
+
+                    b.Navigation("SalesOrderLine");
+
+                    b.Navigation("SalesOrderPackagingLine");
+
+                    b.Navigation("SalesOrderServiceLine");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.MailDraft", b =>
