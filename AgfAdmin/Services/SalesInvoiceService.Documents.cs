@@ -21,7 +21,12 @@ namespace AgfAdmin.Services
             if (invoice.Status == SalesInvoiceRules.StatusFinal)
             {
                 var document = await db.SalesInvoiceDocuments.AsNoTracking().Where(d => d.InvoiceId == id).OrderByDescending(d => d.Version).FirstOrDefaultAsync(cancellationToken);
-                snapshot = document != null ? SalesInvoiceSnapshotBuilder.Deserialize(document.SnapshotJson) : await SnapshotAsync(id, cancellationToken);
+                if (document == null)
+                {
+                    // Geen live PDF voor een definitieve factuur: die zou met de actuele bedrijfsgegevens afwijken van wat is vastgelegd.
+                    return ServiceResult<InvoicePdf>.Conflict($"Sales invoice {id} is final but has no stored document; a reliable snapshot is not available.");
+                }
+                snapshot = SalesInvoiceSnapshotBuilder.Deserialize(document.SnapshotJson);
             }
             else
             {
