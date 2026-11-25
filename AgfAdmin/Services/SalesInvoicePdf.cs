@@ -93,6 +93,7 @@ namespace AgfAdmin.Services
         };
 
         public static string Money(decimal? value) => value == null ? "–" : "€ " + value.Value.ToString("N2", Dutch);
+        public static string UnitPrice(decimal value) => "€ " + value.ToString("#,##0.00####", Dutch);
         public static string Quantity(decimal value) => value.ToString(value == decimal.Truncate(value) ? "N0" : "#,##0.###", Dutch);
         private static string Percent(decimal value) => value.ToString(value == decimal.Truncate(value) ? "0" : "0.##", Dutch) + "%";
         private static string Date(DateTime? utc) => utc == null ? "–"
@@ -255,7 +256,7 @@ namespace AgfAdmin.Services
                         });
                         Cell().AlignRight().Text(line.NetKg == null ? "" : WeightDisplay.Kg(line.NetKg, null));
                     }
-                    Cell().AlignRight().Text(line.UnitPrice == null ? L("noPrice") : Money(line.UnitPrice));
+                    Cell().AlignRight().Text(line.UnitPrice == null ? L("noPrice") : UnitPrice(line.UnitPrice.Value));
                     Cell().Text(Unit(line.Unit));
                     Cell().AlignRight().Text(line.Discount == 0m ? "" : Percent(line.Discount));
                     Cell().AlignRight().Text(Percent(line.VatPercentage));

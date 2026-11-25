@@ -160,8 +160,10 @@ namespace AgfAdmin.Data
             foreach (var entry in entries.Where(e => e.State == EntityState.Modified))
             {
                 var changed = entry.Properties.Where(p => p.IsModified && !Equals(p.OriginalValue, p.CurrentValue)).Select(p => p.Metadata.Name).ToList();
+                var documentId = entry.Entity.Id;
+                var storedSentAt = await FirstOrDefaultAsync(db.SalesInvoiceDocuments.AsNoTracking().Where(d => d.Id == documentId).Select(d => d.SentAt), async, cancellationToken);
                 if (changed.Any(name => name is not (nameof(SalesInvoiceDocument.SentAt) or nameof(SalesInvoiceDocument.SentBy)))
-                    || entry.Property(d => d.SentAt).OriginalValue != null && changed.Count > 0)
+                    || (entry.Property(d => d.SentAt).OriginalValue != null || storedSentAt != null) && changed.Count > 0)
                 {
                     throw new TraceabilityViolationException("A sales invoice document never changes; only the moment it was sent is recorded, once.");
                 }
