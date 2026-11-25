@@ -15,7 +15,7 @@ namespace AgfAdmin.Services
         private static readonly JsonSerializerOptions AuditJson = new(JsonSerializerDefaults.Web);
 
         // Een geplande regel: de nieuwe factuurregel en, bij een productregel, de verdeling over pallets (oudste eerst).
-        private sealed record PlannedLine(InvoiceLine Line, List<(int ContentId, decimal Quantity, decimal Kg, string Ggn)> Allocations);
+        private sealed record PlannedLine(InvoiceLine Line, List<(int ContentId, decimal Quantity, decimal Kg, string Ggn)> Allocations, Dictionary<int, int> Versions = null);
 
         public async Task<ServiceResult<SalesInvoiceDto>> CreateDirectAsync(CreateDirectInvoiceDto request, CancellationToken cancellationToken = default)
         {
@@ -223,7 +223,9 @@ namespace AgfAdmin.Services
                     var ggns = candidates.ToDictionary(c => c.PalletContentLineId, c => c.Ggn);
                     line.NetWeight = items.Sum(x => x.NetWeightKg);
                     line.Ggn = SalesInvoiceRules.Join(items.Select(x => ggns.GetValueOrDefault(x.PalletContentLineId)).Where(g => g != null).Distinct().OrderBy(g => g, StringComparer.Ordinal), SalesInvoiceRules.MaxGgnLength);
-                    planned.Add(new PlannedLine(line, items.Select(x => (x.PalletContentLineId, x.Quantity, x.NetWeightKg, ggns.GetValueOrDefault(x.PalletContentLineId))).ToList()));
+                    // Versie van elke inhoudsregel zoals bij het plannen gelezen: de save controleert tegen déze versie.
+                    var versions = stock.ToDictionary(s => s.PalletContentLineId, s => s.ContentLineVersion);
+                    planned.Add(new PlannedLine(line, items.Select(x => (x.PalletContentLineId, x.Quantity, x.NetWeightKg, ggns.GetValueOrDefault(x.PalletContentLineId))).ToList(), versions));
                 }
                 else if (dto.LineKind == SalesInvoiceRules.LineService)
                 {
@@ -270,7 +272,21 @@ namespace AgfAdmin.Services
         private async Task<Dictionary<int, PalletContentLine>> ContentsAsync(IEnumerable<PlannedLine> planned, CancellationToken cancellationToken)
         {
             var ids = planned.SelectMany(p => p.Allocations.Select(a => a.ContentId)).Distinct().ToList();
-            return await db.PalletContentLines.Include(c => c.Pallet).Where(c => ids.Contains(c.Id)).ToDictionaryAsync(c => c.Id, cancellationToken);
+            var contents = await db.PalletContentLines.Include(c => c.Pallet).Where(c => ids.Contains(c.Id)).ToDictionaryAsync(c => c.Id, cancellationToken);
+            // Koppel de bij het plannen gelezen versie aan de concurrencycontrole: heeft een andere aanvraag de regel sindsdien gewijzigd,
+            // dan faalt de save met een concurrencyfout (409) in plaats van op verouderde beschikbaarheid door te gaan.
+            foreach (var plan in planned)
+            {
+                if (plan.Versions == null) continue;
+                foreach (var a in plan.Allocations)
+                {
+                    if (contents.TryGetValue(a.ContentId, out var content) && plan.Versions.TryGetValue(a.ContentId, out var version))
+                    {
+                        db.Entry(content).Property(c => c.Version).OriginalValue = version;
+                    }
+                }
+            }
+            return contents;
         }
 
         // Nieuwe regels met hun reserveringen toevoegen.
@@ -336,6 +352,8 @@ namespace AgfAdmin.Services
             }
             var back = releasing.GroupBy(r => r.PalletContentLineId!.Value).ToDictionary(g => g.Key, g => g.Sum(r => r.Quantity));
             var replans = new List<(InvoiceLine Line, PlannedLine Plan)>();
+            // Lopend saldo: wat eerdere herplanningen van deze aanvraag nemen, is niet meer beschikbaar voor de volgende.
+            var freed = new Dictionary<int, decimal>(back);
             foreach (var (line, index) in requantified)
             {
                 var dto = new SalesInvoiceNewLineDto
@@ -344,9 +362,13 @@ namespace AgfAdmin.Services
                     Quantity = changes[index].Quantity, UnitPrice = changes[index].UnitPrice, DiscountPercentage = changes[index].DiscountPercentage, VatPercentage = changes[index].VatPercentage
                 };
                 var lineErrors = new Dictionary<string, string[]>();
-                var plan = (await PlanNewLinesAsync(new List<SalesInvoiceNewLineDto> { dto }, "x", back, lineErrors, cancellationToken)).FirstOrDefault();
+                var plan = (await PlanNewLinesAsync(new List<SalesInvoiceNewLineDto> { dto }, "x", freed, lineErrors, cancellationToken)).FirstOrDefault();
                 foreach (var (k, v) in lineErrors) errors[k.Replace("x[0]", $"lines[{index}]")] = v;
-                if (plan != null) replans.Add((line, plan));
+                if (plan != null)
+                {
+                    replans.Add((line, plan));
+                    foreach (var a in plan.Allocations) freed[a.ContentId] = freed.GetValueOrDefault(a.ContentId) - a.Quantity;
+                }
             }
             for (var i = 0; i < changes.Count; i++)
             {
@@ -366,11 +388,6 @@ namespace AgfAdmin.Services
                 errors["newLines"] = new[] { $"At most {SalesInvoiceRules.MaxLinesPerInvoice} lines per invoice." };
             }
             // Nieuwe regels mogen ook de voorraad gebruiken die bijgestelde regels vrijgeven, maar niet wat die opnieuw nemen.
-            var freed = new Dictionary<int, decimal>(back);
-            foreach (var (_, plan) in replans)
-            {
-                foreach (var a in plan.Allocations) freed[a.ContentId] = freed.GetValueOrDefault(a.ContentId) - a.Quantity;
-            }
             var planned = newLines.Count == 0 ? new List<PlannedLine>() : await PlanNewLinesAsync(newLines, "newLines", freed, errors, cancellationToken);
 
             var contents = await ContentsAsync(replans.Select(r => r.Plan).Concat(planned), cancellationToken);
