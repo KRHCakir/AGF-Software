@@ -38,6 +38,8 @@ const RECEIPT_ORDER_LINK = /^\/receipts\?order=[1-9]\d{0,9}$/;
 const PARTIJ_LINK = /^\/partijen\?id=[1-9]\d{0,9}$/;
 // Eén inkoopfactuur (kosten verdelen per regel).
 const PURCHASE_INVOICE_LINK = /^\/purchase-invoices\?id=[1-9]\d{0,9}$/;
+// Verkoopfactuur 1: een verkoopfactuur openen (rondleiding Verkoopfactuur).
+const SALES_INVOICE_LINK = /^\/sales-invoices\?id=[1-9]\d{0,9}$/;
 // Inkooporder aanpassen (stap 4a): alleen met een numeriek id.
 const PURCHASE_ORDER_EDIT_LINK = /^\/purchase-orders\/edit\?id=[1-9]\d{0,9}$/;
 // Factuur invoeren vanaf de order (stap 4b).
@@ -53,7 +55,7 @@ const SELL_LINK = /^\/sales-orders\?new=1&variantId=[1-9]\d{0,9}&unit=(box|colli
 export function isAllowedDemoHref(href: string): boolean {
     return (DEMO_ROUTES as readonly string[]).includes(href) || ORDER_LINK.test(href) || INSPECTION_SEARCH_LINK.test(href) || PURCHASE_ORDER_LINK.test(href)
         || AVAILABILITY_VARIANT_LINK.test(href) || SELL_LINK.test(href) || RECEIPT_ORDER_LINK.test(href) || PARTIJ_LINK.test(href) || PURCHASE_INVOICE_LINK.test(href)
-        || PURCHASE_ORDER_EDIT_LINK.test(href) || PURCHASE_INVOICE_FOR_ORDER_LINK.test(href) || RELATION_CERTIFICATES_LINK.test(href);
+        || PURCHASE_ORDER_EDIT_LINK.test(href) || PURCHASE_INVOICE_FOR_ORDER_LINK.test(href) || RELATION_CERTIFICATES_LINK.test(href) || SALES_INVOICE_LINK.test(href);
 }
 
 export function orderHref(id: number): string {
