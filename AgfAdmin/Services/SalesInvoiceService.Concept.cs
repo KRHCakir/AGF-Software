@@ -452,7 +452,6 @@ namespace AgfAdmin.Services
             {
                 await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Invoices\" WHERE \"Id\" = {invoice.Id} FOR UPDATE", cancellationToken);
             }
-            await LockInvoiceStockAsync(invoice, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
