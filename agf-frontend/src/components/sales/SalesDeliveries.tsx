@@ -51,6 +51,8 @@ function DeliveryInvoice({ deliveryId, info, onChanged }: { deliveryId: number; 
     const [error, setError] = useState<ApiError | null>(null);
     const [created, setCreated] = useState<number | null>(null);
     const key = useRef<string | null>(null);
+    // De lokale waarde geldt alleen tot de vernieuwde servergegevens binnen zijn; daarna wint `info` (concept definitief of verwijderd).
+    useEffect(() => { setCreated(null); }, [info]);
     if (info === undefined) return null;
     const finals = info.invoices.filter((invoice) => invoice.status === 'Final');
     const concept = created ?? info.openConceptId;

@@ -16,7 +16,7 @@ import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel
 export default function InvoiceConceptEditor({ invoice, onChanged, onReload }: { invoice: SalesInvoice; onChanged: (next: SalesInvoice) => void; onReload?: () => void }) {
     const { t, locale } = useTranslation();
     const [open, setOpen] = useState(false);
-    const [drafts, setDrafts] = useState<LineDraft[]>(() => invoice.lines.map((line) => draftOf(line)));
+    const [drafts, setDrafts] = useState<LineDraft[]>(() => invoice.lines.map((line) => draftOf(line, locale)));
     const [reference, setReference] = useState(invoice.referenceNumber ?? '');
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [message, setMessage] = useState<string | null>(null);
@@ -24,12 +24,12 @@ export default function InvoiceConceptEditor({ invoice, onChanged, onReload }: {
     const [busy, setBusy] = useState(false);
 
     useEffect(() => {
-        setDrafts(invoice.lines.map((line) => draftOf(line)));
+        setDrafts(invoice.lines.map((line) => draftOf(line, locale)));
         setReference(invoice.referenceNumber ?? '');
         setErrors({});
         setMessage(null);
         setStale(false);
-    }, [invoice]);
+    }, [invoice, locale]);
 
     if (invoice.status !== 'Concept') return null;
     if (!open) {
@@ -37,7 +37,7 @@ export default function InvoiceConceptEditor({ invoice, onChanged, onReload }: {
     }
     const change = (index: number, patch: Partial<LineDraft>) => setDrafts((current) => current.map((draft, i) => (i === index ? { ...draft, ...patch } : draft)));
     const save = async () => {
-        const built = buildLineUpdates(drafts);
+        const built = buildLineUpdates(drafts, locale);
         if (!built.ok) { setErrors(built.errors); return; }
         setBusy(true);
         setErrors({});
