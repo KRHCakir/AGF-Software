@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { localToday } from '../../lib/calendarDate';
 import { formatDecimalInput } from '../../lib/decimal';
-import { buildDirectLines, emptyService, formKeyOf, isBlankService, serviceDraftAmounts, type ServiceDraft } from '../../lib/directInvoice';
+import { buildDirectLines, emptyService, formKeyOf, isBlankService, isShownFormKey, serviceDraftAmounts, type ServiceDraft } from '../../lib/directInvoice';
 import { purchaseLineRow, purchaseLineTotals } from '../../lib/purchaseOrderLines';
 import { newRequestId } from '../../lib/requestId';
 import { emptySalesLine, type SalesLineDraft } from '../../lib/salesLine';
@@ -63,22 +63,23 @@ export default function DirectInvoiceForm({ customers, products, serviceArticles
     // Alleen een definitieve afwijzing of succes wist de sleutel (zie save).
     const edited = () => { if (busy) return; setFailure(null); };
 
+    const setPending = (key: string, on: boolean) => setLotPending((current) => { const next = new Set(current); if (on) next.add(key); else next.delete(key); return next; });
+
     const updateLine = (key: string, patch: Partial<SalesLineDraft>) => {
-        // Een ander artikel: de gekozen partij hoort bij het oude artikel en vervalt.
+        // Een ander artikel: de gekozen partij hoort bij het oude artikel en vervalt, en een openstaande partijtekst ook.
+        if (patch.productVariantId !== undefined && lines.some((line) => line.key === key && line.productVariantId !== patch.productVariantId)) setPending(key, false);
         setLines((current) => current.map((line) => (line.key === key
             ? { ...line, ...patch, ...(patch.productVariantId !== undefined && patch.productVariantId !== line.productVariantId ? { partijId: null, partijNumber: null } : {}) }
             : line)));
         edited();
     };
     const addLine = () => { if (lines.length + services.length < MAX_LINES) { setLines((current) => [...current, emptySalesLine(nextKey())]); edited(); } };
-    const removeLine = (key: string) => { setLines((current) => (current.length > 1 ? current.filter((line) => line.key !== key) : current)); edited(); };
+    const removeLine = (key: string) => { if (lines.length > 1) setPending(key, false); setLines((current) => (current.length > 1 ? current.filter((line) => line.key !== key) : current)); edited(); };
     const changeService = (index: number, patch: Partial<ServiceDraft>) => { setServices((current) => current.map((line, i) => (i === index ? { ...line, ...patch } : line))); edited(); };
     const chooseServiceArticle = (index: number, value: string) => {
         const article = serviceArticles.find((a) => String(a.id) === value);
         changeService(index, { costArticleId: value, ...(article ? { description: article.name, vat: String(article.vatPercentage ?? 21), unitPrice: article.defaultUnitPrice == null ? '' : formatDecimalInput(article.defaultUnitPrice, 2, undefined, 2) } : {}) });
     };
-    const setPending = (key: string, on: boolean) => setLotPending((current) => { const next = new Set(current); if (on) next.add(key); else next.delete(key); return next; });
-
     const save = async () => {
         const nextErrors: Record<string, string> = {};
         if (customerId === '') nextErrors.customerId = 'si_direct_customer_required';
@@ -114,7 +115,9 @@ export default function DirectInvoiceForm({ customers, products, serviceArticles
     // Serverteksten staan er letterlijk; eigen sleutels worden vertaald.
     const message = (key: string) => (errors[key] ? (errors[key].startsWith('si_') || errors[key].startsWith('supply_') ? t(errors[key]) : errors[key]) : null);
     const lineErrors = (key: string) => (message(key) ? [message(key)!] : undefined);
-    const amounts = purchaseLineTotals(rows.filter((row, index) => lines[index].productVariantId !== ''), serviceDraftAmounts(services)).amounts;
+    // Serverfouten zonder veld in het formulier (bijvoorbeeld korting of prijs van een productregel) tonen we hier, zodat opslaan nooit stil mislukt.
+    const unshownErrors = failure ? Object.keys(errors).filter((key) => !isShownFormKey(key)).map((key) => message(key)!) : [];
+    const amounts =purchaseLineTotals(rows.filter((row, index) => lines[index].productVariantId !== ''), serviceDraftAmounts(services)).amounts;
 
     return (
         <form className="space-y-4 rounded-md border border-gray-200 bg-white p-3" data-testid="si-direct-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
@@ -181,6 +184,7 @@ export default function DirectInvoiceForm({ customers, products, serviceArticles
                                     <option value="">{t('si_direct_service_free')}</option>
                                     {serviceArticles.filter((a) => a.isActive).map((a) => <option key={a.id} value={String(a.id)}>{a.name}</option>)}
                                 </select>
+                                <FieldError id={`${key}.costArticleId`} messages={lineErrors(`${key}.costArticleId`)} />
                             </div>
                             <div>
                                 <label htmlFor={`${key}.quantity`} className="text-xs font-medium text-gray-700">{t('si_line_quantity')}</label>
@@ -198,6 +202,7 @@ export default function DirectInvoiceForm({ customers, products, serviceArticles
                                 <select id={`${key}.vat`} className={inputClass} value={line.vat} onChange={(event) => changeService(index, { vat: event.target.value })}>
                                     {VAT_CHOICES.map((rate) => <option key={rate} value={rate}>{rate}%</option>)}
                                 </select>
+                                <FieldError id={`${key}.vat`} messages={lineErrors(`${key}.vat`)} />
                             </div>
                             <div>
                                 <label htmlFor={`${key}.revenueTypeId`} className="text-xs font-medium text-gray-700">{t('si_revenue_type')}</label>
@@ -218,6 +223,11 @@ export default function DirectInvoiceForm({ customers, products, serviceArticles
             <OrderAmountsSummary amounts={amounts} currency="EUR" />
             {failure && earlierSaved && <p role="alert" className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-testid="si-direct-earlier-saved">{t('si_direct_earlier_saved')}</p>}
             {failure && !earlierSaved && Object.keys(failure.fieldErrors).length === 0 && <ErrorNotice error={failure} />}
+            {failure && !earlierSaved && unshownErrors.length > 0 && (
+                <ul role="alert" className="list-disc rounded border border-red-300 bg-red-50 py-2 pl-7 pr-3 text-sm text-red-900" data-testid="si-direct-unshown-errors">
+                    {unshownErrors.map((text) => <li key={text}>{text}</li>)}
+                </ul>
+            )}
             <div className="flex flex-wrap items-center gap-2 border-t border-gray-200 pt-3">
                 <button type="submit" className={primaryButtonClass} disabled={busy || lotPending.size > 0} data-tour="si-direct-save">{t('si_direct_save')}</button>
                 <button type="button" className={secondaryButtonClass} onClick={onCancel} disabled={busy}>{t('si_cancel')}</button>
