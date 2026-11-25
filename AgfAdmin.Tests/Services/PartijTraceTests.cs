@@ -1,4 +1,5 @@
 using AgfAdmin.Controllers;
+using AgfAdmin.Data;
 using AgfAdmin.DTOs;
 using AgfAdmin.Models;
 using AgfAdmin.Services;
@@ -82,6 +83,22 @@ public sealed class PartijTraceTests : IDisposable
     }
 
     // Review: de inkoopwaarde van een directe factuur gebruikt de inkoopprijs alleen in dezelfde eenheid (de prijs geldt per verpakking).
+    // Een directe factuur van vóór verkoopfactuur 1 (Kind leeg, zonder voorraad), zoals de oude route POST /api/SalesInvoice die maakte:
+    // die route is vervangen door /api/sales-invoices, maar zulke facturen kunnen in een database staan en blijven herleidbaar.
+    private async Task LegacyDirectInvoiceAsync(AppDbContext db, string unit)
+    {
+        var invoice = new Invoice
+        {
+            InvoiceNumber = "FAC-20261123-1001", InvoiceDate = DateTime.UtcNow, DeliveryDate = DateTime.UtcNow, CustomCustomerName = "Balieklant", Status = "Nieuw",
+            BatchNumber = "V-2611001",
+            InvoiceLines = new List<InvoiceLine> { new() { Description = "Tomaat ronde", Quantity = 4m, Unit = unit, UnitPrice = 12m, VATPercentage = 9m, PartijId = _lotA } }
+        };
+        var lot = new Partij { Number = "V-2611001", NumberKey = PartijRules.NumberKey("V-2611001"), Kind = PartijRules.KindSales, Invoice = invoice, CreatedBy = "test" };
+        invoice.SalesPartij = lot;
+        db.AddRange(invoice, lot);
+        await db.SaveChangesAsync();
+    }
+
     [Theory]
     [InlineData("colli", 40.0)]
     [InlineData("kg", null)]
@@ -90,11 +107,7 @@ public sealed class PartijTraceTests : IDisposable
         await ArrangeAsync();
         await using (var db = _s.Factory.CreateContext())
         {
-            var created = await new SalesInvoiceController(db, new PartijService(db)).CreateInvoice(new SalesInvoiceController.CreateInvoiceDto
-            {
-                CustomerName = "Balieklant", Lines = new() { new() { Description = "Tomaat ronde", Quantity = 4m, Unit = unit, UnitPrice = 12m, VATPercentage = 9m, PartijId = _lotA } }
-            });
-            Assert.IsType<OkObjectResult>(created);
+            await LegacyDirectInvoiceAsync(db, unit);
         }
         await using var verify = _s.Factory.CreateContext();
         var lot = await verify.Partijen.SingleAsync(p => p.InvoiceId != null);
@@ -111,11 +124,7 @@ public sealed class PartijTraceTests : IDisposable
             var order = await db.SupplyCommitments.SingleAsync(c => c.PartijId == _lotA);
             db.Add(new SupplyCommitmentLine { SupplyCommitmentId = order.Id, ProductVariantId = _s.TomatoId, ExpectedQuantity = 5m, ExpectedUnit = "colli", PartijId = _lotA });
             await db.SaveChangesAsync();
-            var created = await new SalesInvoiceController(db, new PartijService(db)).CreateInvoice(new SalesInvoiceController.CreateInvoiceDto
-            {
-                CustomerName = "Balieklant", Lines = new() { new() { Description = "Tomaat ronde", Quantity = 4m, Unit = "colli", UnitPrice = 12m, VATPercentage = 9m, PartijId = _lotA } }
-            });
-            Assert.IsType<OkObjectResult>(created);
+            await LegacyDirectInvoiceAsync(db, "colli");
         }
         await using var verify = _s.Factory.CreateContext();
         var lot = await verify.Partijen.SingleAsync(p => p.InvoiceId != null);
@@ -163,11 +172,7 @@ public sealed class PartijTraceTests : IDisposable
         await ArrangeAsync();
         await using (var db = _s.Factory.CreateContext())
         {
-            var created = await new SalesInvoiceController(db, new PartijService(db)).CreateInvoice(new SalesInvoiceController.CreateInvoiceDto
-            {
-                CustomerName = "Balieklant", Lines = new() { new() { Description = "Tomaat ronde", Quantity = 4m, Unit = "colli", UnitPrice = 12m, VATPercentage = 9m, PartijId = _lotA } }
-            });
-            Assert.IsType<OkObjectResult>(created);
+            await LegacyDirectInvoiceAsync(db, "colli");
         }
         await using var verify = _s.Factory.CreateContext();
         var lot = await verify.Partijen.SingleAsync(p => p.InvoiceId != null);
