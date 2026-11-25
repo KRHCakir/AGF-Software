@@ -5278,6 +5278,67 @@ namespace AgfAdmin.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.SalesInvoiceStockLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("InvoiceId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("InvoiceLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("NetWeightKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<int>("PalletContentLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<int>("StockMovementId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StockReservationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InvoiceId");
+
+                    b.HasIndex("InvoiceLineId");
+
+                    b.HasIndex("PalletContentLineId");
+
+                    b.HasIndex("StockMovementId")
+                        .IsUnique();
+
+                    b.HasIndex("StockReservationId")
+                        .IsUnique();
+
+                    b.ToTable("SalesInvoiceStockLines", t =>
+                        {
+                            t.HasCheckConstraint("CK_SalesInvoiceStockLines_NetWeight_Positive", "CAST(\"NetWeightKg\" AS NUMERIC) > 0");
+
+                            t.HasCheckConstraint("CK_SalesInvoiceStockLines_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
+                        });
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.SalesOrder", b =>
                 {
                     b.Property<int>("Id")
@@ -6178,6 +6239,9 @@ namespace AgfAdmin.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("InvoiceLineId")
+                        .HasColumnType("integer");
+
                     b.Property<decimal?>("NetWeightKg")
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
@@ -6237,6 +6301,8 @@ namespace AgfAdmin.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("InvoiceLineId");
+
                     b.HasIndex("OrderLineId");
 
                     b.HasIndex("PalletContentLineId");
@@ -6261,13 +6327,15 @@ namespace AgfAdmin.Migrations
 
                             t.HasCheckConstraint("CK_StockReservations_DirectTrade_StatusAllowed", "\"Source\" IS NULL OR \"Source\" <> 'DirectTrade' OR \"Status\" IN ('Active', 'Released', 'Consumed', 'Corrected')");
 
+                            t.HasCheckConstraint("CK_StockReservations_InvoiceFlowComplete", "\"InvoiceLineId\" IS NULL OR (\"RequestId\" IS NOT NULL AND \"Unit\" IS NOT NULL AND \"Source\" = 'Physical' AND \"PalletContentLineId\" IS NOT NULL AND \"NetWeightKg\" IS NOT NULL AND CAST(\"NetWeightKg\" AS NUMERIC) > 0 AND \"SalesDeliveryId\" IS NULL)");
+
                             t.HasCheckConstraint("CK_StockReservations_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
 
                             t.HasCheckConstraint("CK_StockReservations_ReleasedConsistent", "\"Status\" <> 'Released' OR (\"ReleasedAt\" IS NOT NULL AND \"ReleaseReason\" IS NOT NULL AND length(trim(\"ReleaseReason\")) > 0)");
 
                             t.HasCheckConstraint("CK_StockReservations_SalesFlowComplete", "\"SalesOrderLineId\" IS NULL OR (\"RequestId\" IS NOT NULL AND \"Unit\" IS NOT NULL AND \"Source\" IS NOT NULL AND \"Source\" IN ('Physical', 'DirectTrade') AND ((\"Source\" = 'Physical' AND \"PalletContentLineId\" IS NOT NULL AND \"NetWeightKg\" IS NOT NULL AND CAST(\"NetWeightKg\" AS NUMERIC) > 0) OR (\"Source\" = 'DirectTrade' AND \"PalletContentLineId\" IS NULL AND \"NetWeightKg\" IS NULL)))");
 
-                            t.HasCheckConstraint("CK_StockReservations_SingleOwner", "(\"OrderLineId\" IS NOT NULL AND \"SalesOrderLineId\" IS NULL) OR (\"OrderLineId\" IS NULL AND \"SalesOrderLineId\" IS NOT NULL)");
+                            t.HasCheckConstraint("CK_StockReservations_SingleOwner", "(\"OrderLineId\" IS NOT NULL AND \"SalesOrderLineId\" IS NULL AND \"InvoiceLineId\" IS NULL) OR (\"OrderLineId\" IS NULL AND \"SalesOrderLineId\" IS NOT NULL AND \"InvoiceLineId\" IS NULL) OR (\"OrderLineId\" IS NULL AND \"SalesOrderLineId\" IS NULL AND \"InvoiceLineId\" IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_StockReservations_Status_Allowed", "\"Status\" IN ('Active', 'Released', 'Consumed', 'Corrected')");
                         });
@@ -7871,6 +7939,49 @@ namespace AgfAdmin.Migrations
                     b.Navigation("StockReservation");
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.SalesInvoiceStockLine", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.Invoice", "Invoice")
+                        .WithMany()
+                        .HasForeignKey("InvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.InvoiceLine", "InvoiceLine")
+                        .WithMany()
+                        .HasForeignKey("InvoiceLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.PalletContentLine", "PalletContentLine")
+                        .WithMany()
+                        .HasForeignKey("PalletContentLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.StockMovement", "StockMovement")
+                        .WithMany()
+                        .HasForeignKey("StockMovementId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.StockReservation", "StockReservation")
+                        .WithMany()
+                        .HasForeignKey("StockReservationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Invoice");
+
+                    b.Navigation("InvoiceLine");
+
+                    b.Navigation("PalletContentLine");
+
+                    b.Navigation("StockMovement");
+
+                    b.Navigation("StockReservation");
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.SalesOrder", b =>
                 {
                     b.HasOne("AgfAdmin.Models.Customer", "Customer")
@@ -8097,6 +8208,11 @@ namespace AgfAdmin.Migrations
 
             modelBuilder.Entity("AgfAdmin.Models.StockReservation", b =>
                 {
+                    b.HasOne("AgfAdmin.Models.InvoiceLine", "InvoiceLine")
+                        .WithMany("Reservations")
+                        .HasForeignKey("InvoiceLineId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgfAdmin.Models.OrderLine", "OrderLine")
                         .WithMany()
                         .HasForeignKey("OrderLineId")
@@ -8122,6 +8238,8 @@ namespace AgfAdmin.Migrations
                         .HasForeignKey("SupplyCommitmentLineId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("InvoiceLine");
 
                     b.Navigation("OrderLine");
 
@@ -8391,6 +8509,11 @@ namespace AgfAdmin.Migrations
                     b.Navigation("InvoiceLines");
 
                     b.Navigation("SalesPartij");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.InvoiceLine", b =>
+                {
+                    b.Navigation("Reservations");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.Order", b =>

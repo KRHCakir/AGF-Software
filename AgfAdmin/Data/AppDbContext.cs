@@ -28,6 +28,7 @@ namespace AgfAdmin.Data
         public DbSet<Invoice> Invoices { get; set; }
         public DbSet<InvoiceLine> InvoiceLines { get; set; }
         public DbSet<RevenueType> RevenueTypes { get; set; }
+        public DbSet<SalesInvoiceStockLine> SalesInvoiceStockLines { get; set; }
         public DbSet<Inventory> Inventory { get; set; }
         public DbSet<Shipment> Shipments { get; set; }
 
@@ -757,6 +758,26 @@ namespace AgfAdmin.Data
                 b.Property(l => l.Ggn).HasMaxLength(SalesInvoiceRules.MaxGgnLength);
             });
 
+            // Afboeking van een directe factuur (regel 8 en 46): één verbruikte reservering per regel, met haar Dispatch-mutatie.
+            modelBuilder.Entity<SalesInvoiceStockLine>(b =>
+            {
+                b.HasOne(l => l.Invoice).WithMany().HasForeignKey(l => l.InvoiceId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(l => l.InvoiceLine).WithMany().HasForeignKey(l => l.InvoiceLineId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(l => l.StockReservation).WithMany().HasForeignKey(l => l.StockReservationId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(l => l.PalletContentLine).WithMany().HasForeignKey(l => l.PalletContentLineId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(l => l.StockMovement).WithMany().HasForeignKey(l => l.StockMovementId).OnDelete(DeleteBehavior.Restrict);
+                b.HasIndex(l => l.StockReservationId).IsUnique();
+                b.HasIndex(l => l.StockMovementId).IsUnique();
+                b.Property(l => l.Quantity).HasPrecision(18, 3);
+                b.Property(l => l.NetWeightKg).HasPrecision(18, 3);
+                b.Property(l => l.Unit).IsRequired().HasMaxLength(32);
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_SalesInvoiceStockLines_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
+                    t.HasCheckConstraint("CK_SalesInvoiceStockLines_NetWeight_Positive", "CAST(\"NetWeightKg\" AS NUMERIC) > 0");
+                });
+            });
+
             modelBuilder.Entity<RevenueType>(b =>
             {
                 b.Property(r => r.Name).IsRequired().HasMaxLength(SalesInvoiceRules.MaxRevenueTypeNameLength);
@@ -1183,8 +1204,15 @@ namespace AgfAdmin.Data
                 // en in een toelatingslijst: een NULL of onbekende bron valt anders in UNKNOWN en zou de check passeren.
                 b.ToTable(t =>
                 {
+                    // Verkoopfactuur 1: de productregel van een directe verkoopfactuur is de derde mogelijke eigenaar.
                     t.HasCheckConstraint("CK_StockReservations_SingleOwner",
-                        "(\"OrderLineId\" IS NOT NULL AND \"SalesOrderLineId\" IS NULL) OR (\"OrderLineId\" IS NULL AND \"SalesOrderLineId\" IS NOT NULL)");
+                        "(\"OrderLineId\" IS NOT NULL AND \"SalesOrderLineId\" IS NULL AND \"InvoiceLineId\" IS NULL) " +
+                        "OR (\"OrderLineId\" IS NULL AND \"SalesOrderLineId\" IS NOT NULL AND \"InvoiceLineId\" IS NULL) " +
+                        "OR (\"OrderLineId\" IS NULL AND \"SalesOrderLineId\" IS NULL AND \"InvoiceLineId\" IS NOT NULL)");
+                    // Een factuurreservering is altijd fysiek: een inhoudsregel met gemeten kg, eenheid en sleutel; nooit aan een levering.
+                    t.HasCheckConstraint("CK_StockReservations_InvoiceFlowComplete",
+                        "\"InvoiceLineId\" IS NULL OR (\"RequestId\" IS NOT NULL AND \"Unit\" IS NOT NULL AND \"Source\" = 'Physical' AND \"PalletContentLineId\" IS NOT NULL " +
+                        "AND \"NetWeightKg\" IS NOT NULL AND CAST(\"NetWeightKg\" AS NUMERIC) > 0 AND \"SalesDeliveryId\" IS NULL)");
                     t.HasCheckConstraint("CK_StockReservations_Status_Allowed",
                         "\"Status\" IN ('Active', 'Released', 'Consumed', 'Corrected')");
                     t.HasCheckConstraint("CK_StockReservations_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
@@ -1206,6 +1234,12 @@ namespace AgfAdmin.Data
                 b.HasOne(r => r.OrderLine)
                     .WithMany()
                     .HasForeignKey(r => r.OrderLineId)
+                    .IsRequired(false)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                b.HasOne(r => r.InvoiceLine)
+                    .WithMany(l => l.Reservations)
+                    .HasForeignKey(r => r.InvoiceLineId)
                     .IsRequired(false)
                     .OnDelete(DeleteBehavior.Restrict);
 

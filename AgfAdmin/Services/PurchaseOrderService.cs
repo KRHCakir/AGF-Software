@@ -637,7 +637,7 @@ namespace AgfAdmin.Services
         {
             var reservations = await _db.StockReservations.AsNoTracking()
                 .Where(r => r.PalletContentLineId != null && contentIds.Contains(r.PalletContentLineId.Value)
-                    && r.SalesOrderLineId != null && r.Status == ReservationRules.StatusActive && r.Source == ReservationRules.SourcePhysical)
+                    && (r.SalesOrderLineId != null || r.InvoiceLineId != null) && r.Status == ReservationRules.StatusActive && r.Source == ReservationRules.SourcePhysical)
                 .Select(r => new { ContentId = r.PalletContentLineId!.Value, r.Quantity, r.NetWeightKg })
                 .ToListAsync(cancellationToken);
             return reservations.GroupBy(r => r.ContentId).ToDictionary(g => g.Key, g => (g.Sum(r => r.Quantity), g.Sum(r => r.NetWeightKg ?? 0m)));

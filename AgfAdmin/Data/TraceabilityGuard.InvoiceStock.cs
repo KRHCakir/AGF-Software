@@ -1,0 +1,147 @@
+using AgfAdmin.Models;
+using AgfAdmin.Services;
+using Microsoft.EntityFrameworkCore;
+
+namespace AgfAdmin.Data
+{
+    internal static partial class TraceabilityGuard
+    {
+        // ---- Regel 46: voorraad van een directe factuur (verkoopfactuur 1) ----
+        //
+        // 1. een nieuwe actieve factuurreservering hoort bij een productregel (niet weggehaald) van een directe factuur die een concept is en
+        //    blijft, en komt uit de partij, het artikel en de eenheid van die regel; de eigenaar van een reservering verandert nooit;
+        // 2. afboeken gaat met precies één afboekregel (SalesInvoiceStockLine) per verbruikte reservering: een exacte kopie, met haar
+        //    Dispatch-mutatie (regel 8 telt de mutaties en de afgeboekte totalen); afboekregels zijn append-only;
+        // 3. wordt de factuur definitief, dan staat er geen actieve reservering meer op haar regels en is van elke productregel precies het
+        //    aantal afgeboekt; vervalt het concept, dan staat er geen actieve reservering meer.
+        private static async Task CheckInvoiceStockAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
+        {
+            if (db.ChangeTracker.Entries<SalesInvoiceStockLine>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
+            {
+                throw new TraceabilityViolationException("Stock lines of a sales invoice are append-only.");
+            }
+            foreach (var entry in db.ChangeTracker.Entries<StockReservation>().Where(e => e.State == EntityState.Modified && e.Property(r => r.InvoiceLineId).IsModified))
+            {
+                if (entry.Property(r => r.InvoiceLineId).OriginalValue != entry.Property(r => r.InvoiceLineId).CurrentValue)
+                {
+                    throw new TraceabilityViolationException("The invoice line of a reservation never changes.");
+                }
+            }
+
+            var added = db.ChangeTracker.Entries<StockReservation>()
+                .Where(e => e.State == EntityState.Added && IsInvoiceReservation(e.Entity) && e.Entity.Status == ReservationRules.StatusActive)
+                .Select(e => e.Entity).ToList();
+            if (added.Count > 0)
+            {
+                await CheckNewInvoiceReservationsAsync(db, added, async, cancellationToken);
+            }
+
+            var closing = db.ChangeTracker.Entries<Invoice>()
+                .Where(e => e.State == EntityState.Modified && e.Entity.Kind == SalesInvoiceRules.KindDirect && e.Property(i => i.Status).IsModified
+                    && e.Entity.Status is SalesInvoiceRules.StatusFinal or SalesInvoiceRules.StatusDiscarded)
+                .Select(e => e.Entity).ToList();
+            foreach (var invoice in closing)
+            {
+                await CheckClosingInvoiceStockAsync(db, invoice, async, cancellationToken);
+            }
+        }
+
+        private static async Task CheckNewInvoiceReservationsAsync(AppDbContext db, List<StockReservation> added, bool async, CancellationToken cancellationToken)
+        {
+            var trackedLines = db.ChangeTracker.Entries<InvoiceLine>().Select(e => e.Entity).ToList();
+            var storedLineIds = added.Where(r => r.InvoiceLine == null).Select(r => r.InvoiceLineId!.Value).Where(id => trackedLines.All(l => l.Id != id)).Distinct().ToList();
+            var storedLines = storedLineIds.Count == 0 ? new List<InvoiceLine>()
+                : await ToListAsync(db.InvoiceLines.AsNoTracking().Where(l => storedLineIds.Contains(l.Id)), async, cancellationToken);
+            var lines = trackedLines.Concat(storedLines).ToList();
+            InvoiceLine LineOf(StockReservation r) => r.InvoiceLine ?? lines.FirstOrDefault(l => l.Id == r.InvoiceLineId);
+
+            var trackedInvoices = db.ChangeTracker.Entries<Invoice>().ToList();
+            var invoiceIds = lines.Select(l => l.Invoice?.Id ?? l.InvoiceId).Where(id => id > 0).Distinct().ToList();
+            var storedStatus = invoiceIds.Count == 0 ? new Dictionary<int, (string Kind, string Status)>()
+                : (await ToListAsync(db.Invoices.AsNoTracking().Where(i => invoiceIds.Contains(i.Id)).Select(i => new { i.Id, i.Kind, i.Status }), async, cancellationToken))
+                    .ToDictionary(i => i.Id, i => (i.Kind, i.Status));
+
+            var contentIds = added.Select(r => r.PalletContentLine?.Id ?? r.PalletContentLineId ?? 0).Where(id => id > 0).Distinct().ToList();
+            var contents = (await ToListAsync(db.PalletContentLines.AsNoTracking().Where(c => contentIds.Contains(c.Id))
+                    .Select(c => new { c.Id, c.PartijId, c.SupplyCommitmentLine.ProductVariantId, c.Unit }), async, cancellationToken))
+                .ToDictionary(c => c.Id);
+
+            foreach (var reservation in added)
+            {
+                var line = LineOf(reservation);
+                if (line == null)
+                {
+                    continue; // bestaat niet: de FK weigert dit
+                }
+                var invoice = line.Invoice ?? trackedInvoices.FirstOrDefault(e => e.Entity.Id == line.InvoiceId)?.Entity;
+                var (kind, status) = invoice != null ? (invoice.Kind, invoice.Status) : storedStatus.TryGetValue(line.InvoiceId, out var s) ? s : (null, null);
+                var stored = invoice != null && invoice.Id > 0 && storedStatus.TryGetValue(invoice.Id, out var before) ? before.Status : SalesInvoiceRules.StatusConcept;
+                if (kind != SalesInvoiceRules.KindDirect || status != SalesInvoiceRules.StatusConcept || stored != SalesInvoiceRules.StatusConcept
+                    || line.LineKind != SalesInvoiceRules.LineProduct || line.RemovedAt != null)
+                {
+                    throw new TraceabilityViolationException("Stock is only held for a product line of a direct invoice that is a concept.");
+                }
+                var contentId = reservation.PalletContentLine?.Id ?? reservation.PalletContentLineId ?? 0;
+                if (contents.TryGetValue(contentId, out var content)
+                    && (content.PartijId == null || content.PartijId != line.PartijId || content.ProductVariantId != line.ProductVariantId
+                        || !string.Equals(content.Unit, line.Unit, StringComparison.Ordinal)))
+                {
+                    throw new TraceabilityViolationException($"A reservation of invoice line {line.Id} comes from the lot, article and unit of that line.");
+                }
+            }
+        }
+
+        private static async Task CheckClosingInvoiceStockAsync(AppDbContext db, Invoice invoice, bool async, CancellationToken cancellationToken)
+        {
+            var stored = await ToListAsync(db.StockReservations.AsNoTracking().Where(r => r.InvoiceLineId != null && r.InvoiceLine.InvoiceId == invoice.Id)
+                .Select(r => new { r.Id, LineId = r.InvoiceLineId.Value, r.Status, r.Quantity }), async, cancellationToken);
+            var tracked = db.ChangeTracker.Entries<StockReservation>().Where(e => e.State != EntityState.Deleted && IsInvoiceReservation(e.Entity)).ToList();
+            var all = stored.Where(r => tracked.All(e => e.Entity.Id != r.Id)).Select(r => (r.LineId, r.Status, r.Quantity))
+                .Concat(tracked.Where(e => (e.Entity.InvoiceLine?.InvoiceId ?? 0) == invoice.Id || stored.Any(r => r.Id == e.Entity.Id))
+                    .Select(e => (LineId: e.Entity.InvoiceLine?.Id ?? e.Entity.InvoiceLineId ?? 0, e.Entity.Status, e.Entity.Quantity)))
+                .ToList();
+            if (all.Any(r => r.Status == ReservationRules.StatusActive))
+            {
+                throw new TraceabilityViolationException($"Sales invoice {invoice.Id} still holds stock: release or consume it before the invoice is {invoice.Status.ToLowerInvariant()}.");
+            }
+            if (invoice.Status != SalesInvoiceRules.StatusFinal)
+            {
+                return;
+            }
+            var lines = await ToListAsync(db.InvoiceLines.AsNoTracking().Where(l => l.InvoiceId == invoice.Id && l.LineKind == SalesInvoiceRules.LineProduct)
+                .Select(l => new { l.Id, l.Quantity, l.RemovedAt }), async, cancellationToken);
+            foreach (var line in lines)
+            {
+                var consumed = all.Where(r => r.LineId == line.Id && r.Status == ReservationRules.StatusConsumed).Sum(r => r.Quantity);
+                if (consumed != (line.RemovedAt == null ? line.Quantity : 0m))
+                {
+                    throw new TraceabilityViolationException($"Product line {line.Id} of sales invoice {invoice.Id} becomes final with {consumed} booked out instead of its quantity.");
+                }
+            }
+        }
+
+        // Afboekregels van een factuur: elk een exacte kopie van één reservering die nu verbruikt wordt, met haar Dispatch-mutatie.
+        private static void CheckInvoiceStockLines(List<SalesInvoiceStockLine> stockLines, List<StockReservation> consumed, List<StockMovement> movements)
+        {
+            var seen = new HashSet<StockReservation>();
+            foreach (var line in stockLines)
+            {
+                var reservation = line.StockReservation ?? consumed.FirstOrDefault(r => r.Id == line.StockReservationId);
+                if (reservation == null || !consumed.Contains(reservation) || !seen.Add(reservation))
+                {
+                    throw new TraceabilityViolationException("An invoice stock line books out exactly one reservation of a direct invoice that is consumed in the same save.");
+                }
+                var movement = line.StockMovement ?? movements.FirstOrDefault(m => m.Id == line.StockMovementId && m.Id != 0);
+                var lineId = line.InvoiceLine?.Id ?? line.InvoiceLineId;
+                var reservationLine = reservation.InvoiceLine?.Id ?? reservation.InvoiceLineId;
+                if (movement == null || (movement.StockReservation ?? null) != reservation && movement.StockReservationId != reservation.Id
+                    || line.Quantity != reservation.Quantity || !string.Equals(line.Unit, reservation.Unit, StringComparison.Ordinal)
+                    || line.NetWeightKg != reservation.NetWeightKg || (line.PalletContentLine?.Id ?? line.PalletContentLineId) != reservation.PalletContentLineId
+                    || (line.InvoiceLine != null && reservation.InvoiceLine != null ? line.InvoiceLine != reservation.InvoiceLine : lineId != reservationLine))
+                {
+                    throw new TraceabilityViolationException("An invoice stock line copies its reservation exactly and points at its dispatch movement.");
+                }
+            }
+        }
+    }
+}

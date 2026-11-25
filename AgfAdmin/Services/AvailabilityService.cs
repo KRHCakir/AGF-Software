@@ -311,9 +311,10 @@ namespace AgfAdmin.Services
                     c.Pallet.StockLocation.CountryCode))
                 .ToListAsync(cancellationToken);
 
-            // Alleen Active Physical verkoopreserveringen (SalesOrderLineId); legacy OrderLineId-reserveringen nooit.
+            // Alleen Active Physical verkoopreserveringen (SalesOrderLineId) en, sinds verkoopfactuur 1, die van een directe factuur
+            // (InvoiceLineId); legacy OrderLineId-reserveringen nooit.
             var reservationQuery = db.StockReservations.AsNoTracking()
-                .Where(r => r.PalletContentLineId != null && r.SalesOrderLineId != null
+                .Where(r => r.PalletContentLineId != null && (r.SalesOrderLineId != null || r.InvoiceLineId != null)
                     && r.Status == ReservationRules.StatusActive && r.Source == ReservationRules.SourcePhysical);
             if (variantIds != null)
             {

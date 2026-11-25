@@ -1036,7 +1036,8 @@ namespace AgfAdmin.Services
             }
             var rows = await db.StockReservations.AsNoTracking()
                 .Where(r => r.PalletContentLineId != null && contentLineIds.Contains(r.PalletContentLineId.Value)
-                    && r.SalesOrderLineId != null && r.Status == ReservationRules.StatusActive && r.Source == ReservationRules.SourcePhysical)
+                    // Verkoopfactuur 1: ook een concept van een directe factuur houdt voorraad vast.
+                    && (r.SalesOrderLineId != null || r.InvoiceLineId != null) && r.Status == ReservationRules.StatusActive && r.Source == ReservationRules.SourcePhysical)
                 .Select(r => new { ContentId = r.PalletContentLineId!.Value, r.Quantity, r.NetWeightKg })
                 .ToListAsync(cancellationToken);
             return rows.GroupBy(r => r.ContentId).ToDictionary(g => g.Key, g => (g.Sum(r => r.Quantity), g.Sum(r => r.NetWeightKg ?? 0m)));
