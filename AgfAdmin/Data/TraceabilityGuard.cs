@@ -138,6 +138,8 @@ namespace AgfAdmin.Data
     //    alleen bij aanmaken gezet; de soort van een locatie waar een pallet of inkooporder naar wijst, verandert nooit.
     // 44. verkoopfactuur (zie TraceabilityGuard.SalesInvoices.cs): nieuw model nooit verwijderd; alleen Concept -> Definitief of Vervallen;
     //    definitief en vervallen nooit meer gewijzigd; regels alleen in een concept en nooit verwijderd; herkomst van een regel vast.
+    // 45. nooit meer gefactureerd dan geleverd (zie TraceabilityGuard.SalesInvoiceQuantities.cs): per levering en orderregel, en per dienst-
+    //    of emballageregel; de klant van de levering is de klant van de factuur.
     // Regels 5 t/m 7 en 10 t/m 12 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
     // 9. een verzendcorrectie is in beide richtingen consistent: een reservering gaat alleen Consumed -> Corrected samen met precies één
     //    correctieregel (exacte kopie van de verzendregel), één nieuwe inhoudsregel in quarantaine op dezelfde pallet met dezelfde partij en
@@ -276,6 +278,7 @@ namespace AgfAdmin.Data
             await CheckSalesDeliveriesAsync(db, async, cancellationToken);
             await CheckLineLotsAsync(db, async, cancellationToken);
             await CheckSalesInvoicesAsync(db, async, cancellationToken);
+            await CheckSalesInvoiceQuantitiesAsync(db, async, cancellationToken);
         }
 
         // ---- Regel 17: afkeuringen van ontvangen inkoop (zie PurchaseOrderService.RejectAsync) ----
