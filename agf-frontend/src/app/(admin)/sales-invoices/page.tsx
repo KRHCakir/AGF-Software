@@ -104,6 +104,13 @@ function SalesInvoicesWorkspace() {
 
     const changed = (invoice: SalesInvoice) => {
         setDetail({ status: 'ready', data: invoice });
+        // Een gewijzigde factuur heeft een nieuwe versie (of is definitief): haal haar uit de selectie, zodat er geen verouderde versie wordt verstuurd.
+        setChosen((current) => {
+            if (!current.has(invoice.id)) return current;
+            const next = new Map(current);
+            next.delete(invoice.id);
+            return next;
+        });
         setReloadToken((n) => n + 1);
     };
     const items = list.status === 'ready' ? list.data.items : [];
@@ -182,6 +189,7 @@ function SalesInvoicesWorkspace() {
                             <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => setConfirmMany(false)}>{t('si_cancel')}</button>
                         </span>
                     )}
+                    <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => { setChosen(new Map()); setConfirmMany(false); setManyError(null); }}>{t('si_clear_selection')}</button>
                     {manyError && <span role="alert" className="text-red-800">{manyError}</span>}
                 </div>
             )}

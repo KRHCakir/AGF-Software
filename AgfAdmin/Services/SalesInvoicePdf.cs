@@ -216,9 +216,10 @@ namespace AgfAdmin.Services
             {
                 table.ColumnsDefinition(c =>
                 {
-                    c.ConstantColumn(38);
+                    c.ConstantColumn(32);
                     c.RelativeColumn(3);
-                    if (withGoods) { c.ConstantColumn(38); c.RelativeColumn(2); c.ConstantColumn(44); }
+                    // De partij-kolom is breed genoeg voor een GGN (13 cijfers) op één regel.
+                    if (withGoods) { c.ConstantColumn(38); c.RelativeColumn(2.5f); c.ConstantColumn(44); }
                     c.ConstantColumn(56);
                     c.ConstantColumn(34);
                     c.ConstantColumn(40);
@@ -229,7 +230,8 @@ namespace AgfAdmin.Services
                 {
                     void Head(string text, bool right = false)
                     {
-                        var cell = header.Cell().BorderBottom(1).PaddingBottom(2);
+                        // Ruimte tussen de kolommen, zodat koppen als Colli en Omschrijving niet tegen elkaar staan.
+                        var cell = header.Cell().BorderBottom(1).PaddingBottom(2).PaddingHorizontal(3);
                         (right ? cell.AlignRight() : cell).Text(text).Bold().FontSize(8);
                     }
                     Head(L("quantity"), true);
@@ -245,7 +247,7 @@ namespace AgfAdmin.Services
                 foreach (var line in lines)
                 {
                     var background = index++ % 2 == 1 ? Colors.Grey.Lighten4 : Colors.White;
-                    IContainer Cell() => table.Cell().Background(background).PaddingVertical(2).PaddingHorizontal(1);
+                    IContainer Cell() => table.Cell().Background(background).PaddingVertical(2).PaddingHorizontal(3);
                     Cell().AlignRight().Text(Quantity(line.Quantity));
                     Cell().Text(line.Description ?? "");
                     if (withGoods)
