@@ -3594,5 +3594,6 @@
   "settings_revenue_types_activate": "Active again",
   "settings_revenue_types_name": "New revenue type",
   "settings_revenue_types_code": "Ledger code (optional)",
-  "settings_revenue_types_add": "Add"
+  "settings_revenue_types_add": "Add",
+  "si_direct_earlier_saved": "An earlier attempt may already have been saved as a draft, with the details of that moment. Check Sales invoices first; saving again creates a new draft."
 }

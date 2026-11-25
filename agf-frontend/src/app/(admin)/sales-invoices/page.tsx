@@ -227,7 +227,7 @@ function SalesInvoicesWorkspace() {
                 {detail?.status === 'error' && <ErrorState error={detail.error} onRetry={() => setReloadToken((n) => n + 1)} />}
                 {detail?.status === 'ready' && (
                     <SalesInvoiceDetail invoice={detail.data} onChanged={changed}>
-                        <InvoiceConceptEditor invoice={detail.data} onChanged={changed} onReload={() => setReloadToken((n) => n + 1)} />
+                        <InvoiceConceptEditor key={detail.data.id} invoice={detail.data} onChanged={changed} onReload={() => setReloadToken((n) => n + 1)} />
                     </SalesInvoiceDetail>
                 )}
                 {detail?.status === 'ready' && detail.data.status === 'Final' && <InvoiceMailDrafts invoiceId={detail.data.id} reloadKey={detail.data.version} />}

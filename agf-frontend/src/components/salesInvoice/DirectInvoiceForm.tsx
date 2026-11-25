@@ -49,6 +49,10 @@ export default function DirectInvoiceForm({ customers, products, serviceArticles
     const [lotPending, setLotPending] = useState<Set<string>>(new Set());
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [failure, setFailure] = useState<ApiError | null>(null);
+    // Na een onzekere uitkomst (netwerk, 5xx) blijft de sleutel staan. Weigert de server die sleutel daarna met andere gegevens (409), dan
+    // is de eerdere poging al opgeslagen: dat zeggen we dan duidelijk, in plaats van een tweede factuur te maken.
+    const uncertain = useRef(false);
+    const [earlierSaved, setEarlierSaved] = useState(false);
     const [busy, setBusy] = useState(false);
     const requestId = useRef<string | null>(null);
 
@@ -91,10 +95,13 @@ export default function DirectInvoiceForm({ customers, products, serviceArticles
                 referenceNumber: reference.trim() === '' ? null : reference.trim(), lotNumber: null, lines: built.value,
             });
             requestId.current = null;
+            uncertain.current = false;
             onCreated(result.value);
         } catch (caught) {
             const apiError = toApiError(caught);
+            setEarlierSaved(uncertain.current && apiError.status === 409);
             if (apiError.isDefinitiveRejection) requestId.current = null;
+            uncertain.current = !apiError.isDefinitiveRejection;
             const productIndexes = lines.map((line, index) => ({ line, index })).filter(({ line }) => !(line.productVariantId === '' && line.quantity.trim() === '')).map(({ index }) => index);
             const serviceIndexes = services.map((line, index) => ({ line, index })).filter(({ line }) => !isBlankService(line)).map(({ index }) => index);
             const fields = Object.fromEntries(Object.entries(apiError.fieldErrors).map(([key, messages]) => [formKeyOf(key, productIndexes, serviceIndexes), messages.join(' ')]));
@@ -209,7 +216,8 @@ export default function DirectInvoiceForm({ customers, products, serviceArticles
             </fieldset>
 
             <OrderAmountsSummary amounts={amounts} currency="EUR" />
-            {failure && Object.keys(failure.fieldErrors).length === 0 && <ErrorNotice error={failure} />}
+            {failure && earlierSaved && <p role="alert" className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-testid="si-direct-earlier-saved">{t('si_direct_earlier_saved')}</p>}
+            {failure && !earlierSaved && Object.keys(failure.fieldErrors).length === 0 && <ErrorNotice error={failure} />}
             <div className="flex flex-wrap items-center gap-2 border-t border-gray-200 pt-3">
                 <button type="submit" className={primaryButtonClass} disabled={busy || lotPending.size > 0} data-tour="si-direct-save">{t('si_direct_save')}</button>
                 <button type="button" className={secondaryButtonClass} onClick={onCancel} disabled={busy}>{t('si_cancel')}</button>

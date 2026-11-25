@@ -177,10 +177,10 @@ namespace AgfAdmin.Services
                     // Een dienst- of emballageregel die al op het concept staat, is misschien bewust aangepast: laat hem ongemoeid.
                     continue;
                 }
-                if (!newOrderIds.Contains(extra.OrderId)
-                    && invoice.InvoiceLines.Any(l => l.RemovedAt != null && (extra.Packaging ? l.SalesOrderPackagingLineId == extra.LineId : l.SalesOrderServiceLineId == extra.LineId)))
+                if (invoice.InvoiceLines.Any(l => l.RemovedAt != null && (extra.Packaging ? l.SalesOrderPackagingLineId == extra.LineId : l.SalesOrderServiceLineId == extra.LineId)))
                 {
-                    // Zonder nieuwe productregel komt de rest van een extra mee, behalve als die er bewust van dit concept is afgehaald.
+                    // Bewust van dit concept afgehaald: komt er niet opnieuw op, ook niet met een nieuwe levering van dezelfde order. De rest
+                    // blijft open voor een volgende factuur.
                     continue;
                 }
                 if (extra.Packaging)

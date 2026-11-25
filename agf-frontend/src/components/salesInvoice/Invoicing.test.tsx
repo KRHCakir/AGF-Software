@@ -91,6 +91,19 @@ describe('invoicing screens', () => {
         assert.deepEqual(JSON.parse(puts[0].body), { expectedVersion: 2, referenceNumber: null, lines: [{ id: 41, quantity: 20, unitPrice: 13.25, discountPercentage: null, vatPercentage: 9 }] });
     });
 
+    test('switching to another draft with fewer lines while editing does not crash and shows the new lines', async () => {
+        const two = concept();
+        two.lines = [two.lines[0], { ...two.lines[0], id: 42, description: 'Mango Kent', sortOrder: 1 }];
+        await mounted.render(<InvoiceConceptEditor invoice={two} onChanged={() => undefined} />);
+        await click(mounted.container.querySelector<HTMLElement>('[data-tour="si-edit"]')!);
+        assert.equal(mounted.container.querySelectorAll('[data-testid="si-edit-line"]').length, 2);
+        const other = concept({ id: 6 });
+        other.lines = [{ ...other.lines[0], id: 50, description: 'Citroen Primofiori' }];
+        await mounted.render(<InvoiceConceptEditor invoice={other} onChanged={() => undefined} />);
+        assert.equal(mounted.container.querySelectorAll('[data-testid="si-edit-line"]').length, 1);
+        assert.ok(mounted.hasText('Citroen Primofiori'));
+    });
+
     test('the worklist puts the ticked deliveries of one customer in one draft', async () => {
         const created: number[] = [];
         await mounted.render(<ToInvoiceList token={0} onCreated={(id) => created.push(id)} />);

@@ -3594,5 +3594,6 @@
   "settings_revenue_types_activate": "Weer actief",
   "settings_revenue_types_name": "Nieuwe omzetsoort",
   "settings_revenue_types_code": "Code grootboek (optioneel)",
-  "settings_revenue_types_add": "Toevoegen"
+  "settings_revenue_types_add": "Toevoegen",
+  "si_direct_earlier_saved": "Een eerdere poging is mogelijk al opgeslagen als concept, met de gegevens van toen. Kijk eerst in Verkoopfacturen; opnieuw opslaan maakt een nieuw concept."
 }
