@@ -71,7 +71,12 @@ function SalesInvoicesWorkspace() {
         const controller = new AbortController();
         setList((current) => (current.status === 'ready' ? current : { status: 'loading' }));
         listSalesInvoices({ query: debounced, status, page, pageSize: PAGE_SIZE, ...sortParams(sort) }, controller.signal)
-            .then((data) => setList({ status: 'ready', data }))
+            .then((data) => {
+                // Staat de pagina na een verversing buiten het bereik (bv. na definitief maken), ga dan naar de laatste pagina.
+                const lastPage = Math.max(1, Math.ceil(data.total / PAGE_SIZE));
+                if (page > lastPage) { setPage(lastPage); return; }
+                setList({ status: 'ready', data });
+            })
             .catch((caught: unknown) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setList({ status: 'error', error: apiError }); });
         return () => controller.abort();
     }, [debounced, status, page, reloadToken, sort, sortReady]);
@@ -119,7 +124,12 @@ function SalesInvoicesWorkspace() {
             const outcome = await finalizeSalesInvoices(sent.map((item) => ({ id: item.id, expectedVersion: item.version })));
             setResultItems(new Map(sent.map((item) => [item.id, item])));
             setResults(outcome);
-            setChosen(new Map());
+            // Alleen de verzonden facturen uit de selectie halen; ondertussen nieuw aangevinkte blijven staan.
+            setChosen((current) => {
+                const next = new Map(current);
+                sent.forEach((item) => next.delete(item.id));
+                return next;
+            });
             setConfirmMany(false);
             setReloadToken((n) => n + 1);
         } catch (caught) {
