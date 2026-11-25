@@ -76,6 +76,13 @@ namespace AgfAdmin.Services
                 if (db.Database.IsNpgsql())
                 {
                     await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Invoices\" WHERE \"Id\" = {id} FOR UPDATE", cancellationToken);
+                    // Een gelijktijdig verzoek kan intussen definitief hebben gemaakt terwijl wij op het slot wachten: opnieuw kijken, en dan
+                    // is dit een geldige herhaling en geen conflict.
+                    var current = await db.Invoices.AsNoTracking().Where(i => i.Id == id && i.Kind != null).Select(i => new { i.Status, i.Version }).SingleOrDefaultAsync(cancellationToken);
+                    if (current?.Status == SalesInvoiceRules.StatusFinal && current.Version >= expectedVersion)
+                    {
+                        return ServiceResult<SalesInvoiceDto>.Ok(await DtoAsync(id, cancellationToken));
+                    }
                 }
                 var (invoice, refused) = await ConceptForChangeAsync(id, expectedVersion, cancellationToken);
                 if (refused != null)
