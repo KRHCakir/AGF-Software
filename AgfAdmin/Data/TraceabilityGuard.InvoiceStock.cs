@@ -108,8 +108,15 @@ namespace AgfAdmin.Data
             {
                 return;
             }
-            var lines = await ToListAsync(db.InvoiceLines.AsNoTracking().Where(l => l.InvoiceId == invoice.Id && l.LineKind == SalesInvoiceRules.LineProduct)
+            var storedLines = await ToListAsync(db.InvoiceLines.AsNoTracking().Where(l => l.InvoiceId == invoice.Id && l.LineKind == SalesInvoiceRules.LineProduct)
                 .Select(l => new { l.Id, l.Quantity, l.RemovedAt }), async, cancellationToken);
+            // Actuele toestand: opgeslagen regels, overschreven door de tracker (gewijzigd of toegevoegd; verwijderd valt weg).
+            var trackedLines = db.ChangeTracker.Entries<InvoiceLine>().ToList();
+            var lines = storedLines.Where(l => trackedLines.All(e => e.Entity.Id != l.Id)).Select(l => (l.Id, l.Quantity, l.RemovedAt))
+                .Concat(trackedLines.Where(e => e.State != EntityState.Deleted && e.Entity.LineKind == SalesInvoiceRules.LineProduct
+                        && (e.Entity.Invoice?.Id ?? e.Entity.InvoiceId) == invoice.Id)
+                    .Select(e => (e.Entity.Id, e.Entity.Quantity, e.Entity.RemovedAt)))
+                .ToList();
             foreach (var line in lines)
             {
                 var consumed = all.Where(r => r.LineId == line.Id && r.Status == ReservationRules.StatusConsumed).Sum(r => r.Quantity);
@@ -121,8 +128,13 @@ namespace AgfAdmin.Data
         }
 
         // Afboekregels van een factuur: elk een exacte kopie van één reservering die nu verbruikt wordt, met haar Dispatch-mutatie.
-        private static void CheckInvoiceStockLines(List<SalesInvoiceStockLine> stockLines, List<StockReservation> consumed, List<StockMovement> movements)
+        private static async Task CheckInvoiceStockLinesAsync(AppDbContext db, List<SalesInvoiceStockLine> stockLines, List<StockReservation> consumed, List<StockMovement> movements, bool async, CancellationToken cancellationToken)
         {
+            // Eigenaar (factuur) van de factuurregels: uit de tracker, anders uit de database.
+            var lineIds = stockLines.Where(l => l.InvoiceLine == null).Select(l => l.InvoiceLineId).Where(id => id > 0).Distinct().ToList();
+            var storedOwners = lineIds.Count == 0 ? new Dictionary<int, int>()
+                : (await ToListAsync(db.InvoiceLines.AsNoTracking().Where(l => lineIds.Contains(l.Id)).Select(l => new { l.Id, l.InvoiceId }), async, cancellationToken))
+                    .ToDictionary(l => l.Id, l => l.InvoiceId);
             var seen = new HashSet<StockReservation>();
             foreach (var line in stockLines)
             {
@@ -133,6 +145,11 @@ namespace AgfAdmin.Data
                 }
                 var movement = line.StockMovement ?? movements.FirstOrDefault(m => m.Id == line.StockMovementId && m.Id != 0);
                 var lineId = line.InvoiceLine?.Id ?? line.InvoiceLineId;
+                var ownerId = line.InvoiceLine != null ? (line.InvoiceLine.Invoice?.Id ?? line.InvoiceLine.InvoiceId) : storedOwners.TryGetValue(lineId, out var owner) ? owner : 0;
+                if (ownerId > 0 && (line.Invoice?.Id ?? line.InvoiceId) != ownerId)
+                {
+                    throw new TraceabilityViolationException("An invoice stock line belongs to the invoice of its invoice line.");
+                }
                 var reservationLine = reservation.InvoiceLine?.Id ?? reservation.InvoiceLineId;
                 if (movement == null || (movement.StockReservation ?? null) != reservation && movement.StockReservationId != reservation.Id
                     || line.Quantity != reservation.Quantity || !string.Equals(line.Unit, reservation.Unit, StringComparison.Ordinal)

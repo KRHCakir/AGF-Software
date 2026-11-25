@@ -904,7 +904,7 @@ namespace AgfAdmin.Data
             }
 
             await CheckDispatchLinesAsync(db, dispatchLines, consumed.Where(r => !IsInvoiceReservation(r)).ToList(), movements, async, cancellationToken);
-            CheckInvoiceStockLines(invoiceStockLines, consumed.Where(IsInvoiceReservation).ToList(), movements);
+            await CheckInvoiceStockLinesAsync(db, invoiceStockLines, consumed.Where(IsInvoiceReservation).ToList(), movements, async, cancellationToken);
         }
 
         // Verzendregels: elke nieuwe regel is een exacte kopie van precies één reservering die nu Active -> Consumed gaat, verwijst naar
