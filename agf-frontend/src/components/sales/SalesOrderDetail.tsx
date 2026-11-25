@@ -296,7 +296,9 @@ export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, ref
     const [invoicingToken, setInvoicingToken] = useState(0);
     useEffect(() => {
         const controller = new AbortController();
-        getOrderInvoicing(order.id, controller.signal).then(setInvoicing).catch(() => setInvoicing(undefined));
+        getOrderInvoicing(order.id, controller.signal)
+            .then((next) => { if (!controller.signal.aborted) setInvoicing(next); })
+            .catch(() => { if (!controller.signal.aborted) setInvoicing(undefined); });
         return () => controller.abort();
     }, [order.id, order.version, invoicingToken]);
 
