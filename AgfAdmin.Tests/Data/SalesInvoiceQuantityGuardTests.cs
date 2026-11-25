@@ -16,7 +16,7 @@ public sealed class SalesInvoiceQuantityGuardTests : IDisposable
 
     private static Invoice Concept(int customerId, params InvoiceLine[] lines) => new()
     {
-        Kind = SalesInvoiceRules.KindDelivery, Status = SalesInvoiceRules.StatusConcept, CustomerId = customerId, RequestId = Guid.NewGuid(), CreatedBy = "test",
+        Kind = SalesInvoiceRules.KindDelivery, Status = SalesInvoiceRules.StatusConcept, CustomerId = customerId, RequestId = Guid.NewGuid(), RequestFingerprint = "test", CreatedBy = "test",
         InvoiceLines = lines.ToList()
     };
 

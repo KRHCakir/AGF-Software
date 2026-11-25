@@ -19,7 +19,7 @@ namespace AgfAdmin.Data
         //    concept gehaalde regel verandert nooit meer;
         // 5. een omzetsoort wordt nooit verwijderd.
         // Vergeleken met de opgeslagen waarden in de database, niet met OriginalValues.
-        private sealed record StoredInvoice(int Id, string Kind, string Status, int? CustomerId, Guid? RequestId, string CreatedBy, DateTime CreatedAt);
+        private sealed record StoredInvoice(int Id, string Kind, string Status, int? CustomerId, Guid? RequestId, string RequestFingerprint, string CreatedBy, DateTime CreatedAt);
         private sealed record StoredInvoiceLine(int Id, int InvoiceId, string LineKind, int? SalesDeliveryId, int? SalesOrderLineId, int? SalesOrderServiceLineId,
             int? SalesOrderPackagingLineId, int? CostArticleId, int? ProductVariantId, DateTime? RemovedAt);
 
@@ -43,7 +43,7 @@ namespace AgfAdmin.Data
                 .Distinct().ToList();
             var stored = invoiceIds.Count == 0 ? new Dictionary<int, StoredInvoice>()
                 : (await ToListAsync(db.Invoices.AsNoTracking().Where(i => invoiceIds.Contains(i.Id))
-                    .Select(i => new StoredInvoice(i.Id, i.Kind, i.Status, i.CustomerId, i.RequestId, i.CreatedBy, i.CreatedAt)), async, cancellationToken))
+                    .Select(i => new StoredInvoice(i.Id, i.Kind, i.Status, i.CustomerId, i.RequestId, i.RequestFingerprint, i.CreatedBy, i.CreatedAt)), async, cancellationToken))
                     .ToDictionary(i => i.Id);
 
             foreach (var entry in invoiceEntries)
@@ -78,10 +78,10 @@ namespace AgfAdmin.Data
                 {
                     throw new TraceabilityViolationException($"Sales invoice {invoice.Id} is {before.Status.ToLowerInvariant()} and never changes; correct it with a credit invoice.");
                 }
-                if (invoice.Kind != before.Kind || invoice.CustomerId != before.CustomerId || invoice.RequestId != before.RequestId
+                if (invoice.Kind != before.Kind || invoice.CustomerId != before.CustomerId || invoice.RequestId != before.RequestId || invoice.RequestFingerprint != before.RequestFingerprint
                     || invoice.CreatedBy != before.CreatedBy || invoice.CreatedAt != before.CreatedAt)
                 {
-                    throw new TraceabilityViolationException("The kind, customer, key and creator of a sales invoice never change.");
+                    throw new TraceabilityViolationException("The kind, customer, key, request and creator of a sales invoice never change.");
                 }
                 if (invoice.Status == SalesInvoiceRules.StatusConcept && (invoice.InvoiceNumber != null || invoice.InvoiceYear != null || invoice.InvoiceSequence != null || invoice.FinalizedAt != null))
                 {
