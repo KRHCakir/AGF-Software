@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { EmptyState, ErrorState, LoadingRows, type LoadState } from '../../../components/availability/StateViews';
@@ -159,6 +160,7 @@ function SalesInvoicesWorkspace() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                     <button type="button" onClick={() => setReloadToken((n) => n + 1)} className={secondaryButtonClass}>↻ {t('availability_refresh')}</button>
+                    <Link href="/sales-invoices/new" data-tour="si-new" className={primaryButtonClass}>+ {t('si_new_direct')}</Link>
                 </div>
             </div>
 
