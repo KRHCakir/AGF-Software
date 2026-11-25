@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime } from '../../lib/availability';
 import { formatCalendarDate } from '../../lib/calendarDate';
@@ -37,6 +37,8 @@ import MailDraftsPanel from './MailDraftsPanel';
 import PartijNumberLink from '../partij/PartijNumberLink';
 import SalesStepBar from './SalesStepBar';
 import { salesOrderChain } from '../../lib/chain';
+import { getOrderInvoicing } from '../../services/salesInvoiceService';
+import type { DeliveryInvoicing } from '../../types/salesInvoice';
 
 // Detail van één verkooporder: kop, voortgang, annuleren (alleen Open) en per regel reserveren of vrijgeven.
 export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, refreshing = false, refreshFailed = false, fifoLineId = null }: {
@@ -289,10 +291,30 @@ export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, ref
         }
     };
     const showRefreshFailed = refreshFailed || localRefreshFailed;
+    // Verkoopfactuur 1: per levering wat er gefactureerd is (keten-strip en Factureren); bij elke nieuwe versie van de order opnieuw.
+    // Bewaard met de order waar ze bij horen: bij een andere order tellen de gegevens van de vorige niet, ook niet tot de nieuwe binnen zijn.
+    const [loadedInvoicing, setLoadedInvoicing] = useState<{ orderId: number; deliveries: DeliveryInvoicing[] } | undefined>(undefined);
+    const invoicing = loadedInvoicing?.orderId === order.id ? loadedInvoicing.deliveries : undefined;
+    const [invoicingToken, setInvoicingToken] = useState(0);
+    const [invoicingFailed, setInvoicingFailed] = useState(false);
+    useEffect(() => {
+        const controller = new AbortController();
+        setInvoicingFailed(false);
+        getOrderInvoicing(order.id, controller.signal)
+            .then((next) => { if (!controller.signal.aborted) { setLoadedInvoicing({ orderId: order.id, deliveries: next }); setInvoicingFailed(false); } })
+            .catch(() => { if (!controller.signal.aborted) { setLoadedInvoicing(undefined); setInvoicingFailed(true); } });
+        return () => controller.abort();
+    }, [order.id, order.version, invoicingToken]);
 
     return (
         <div className="space-y-3">
-            <ChainStrip steps={salesOrderChain(order)} />
+            <ChainStrip steps={salesOrderChain(order, invoicing === undefined ? undefined : { deliveries: invoicing })} />
+            {invoicingFailed && (
+                <div role="alert" data-testid="invoicing-load-failed" className="flex flex-wrap items-center gap-3 rounded border border-red-300 bg-red-50 px-3 py-1.5 text-sm text-red-900">
+                    <p>{t('sales_invoicing_load_failed')}</p>
+                    <button type="button" className={secondaryButtonClass} onClick={() => setInvoicingToken((n) => n + 1)}>{t('sales_invoicing_retry')}</button>
+                </div>
+            )}
             <header className="rounded-md border border-gray-300 bg-white px-4 py-3">
                 <div className="flex flex-wrap items-center gap-3">
                     <h2 className="text-lg font-semibold text-gray-900">{t('sales_order_heading', { id: orderLabel(order) })} · {order.customerName ?? t('availability_unknown')}</h2>
@@ -403,7 +425,7 @@ export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, ref
                 )}
             </header>
             {/* Feedback 22 november: de leveringen, elk met een eigen V-nummer; Deellevering maakt er een bij. */}
-            <SalesDeliveries order={order} readOnly={readOnly} onChanged={onOrderChanged} />
+            <SalesDeliveries order={order} readOnly={readOnly} onChanged={onOrderChanged} invoicing={invoicing} onInvoicingChanged={() => setInvoicingToken((n) => n + 1)} />
             {/* Bevestigen, de laadbon (documenten deel 1) en het transport met de transportopdracht (deel 2). */}
             <SalesOrderDocuments order={order} onChanged={() => void onOrderChanged()} reloadKey={transportSaves} />
             <SalesOrderTransport order={order} onChanged={() => { setTransportSaves((n) => n + 1); void onOrderChanged(); }} />

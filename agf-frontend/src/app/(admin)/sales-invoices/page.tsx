@@ -7,6 +7,8 @@ import PageTitle from '../../../components/shared/PageTitle';
 import { useListSort } from '../../../components/shared/useListSort';
 import SalesInvoiceDetail from '../../../components/salesInvoice/SalesInvoiceDetail';
 import SalesInvoiceList from '../../../components/salesInvoice/SalesInvoiceList';
+import InvoiceConceptEditor from '../../../components/salesInvoice/InvoiceConceptEditor';
+import ToInvoiceList from '../../../components/salesInvoice/ToInvoiceList';
 import { inputClass } from '../../../components/supply/FieldError';
 import { primaryButtonClass, secondaryButtonClass } from '../../../components/supply/SuccessPanel';
 import { useTranslation } from '../../../i18n/LanguageContext';
@@ -198,6 +200,9 @@ function SalesInvoicesWorkspace() {
                 </ul>
             )}
 
+            {/* Verkoopfactuur 1: de werklijst Nog te factureren (leveringen met een rest, per klant). */}
+            <ToInvoiceList token={reloadToken} onCreated={(id) => { setReloadToken((n) => n + 1); open(id); }} />
+
             {list.status === 'loading' && <LoadingRows label={t('si_loading')} />}
             {list.status === 'error' && <ErrorState error={list.error} onRetry={() => setReloadToken((n) => n + 1)} />}
             {list.status === 'ready' && items.length === 0 && (
@@ -217,7 +222,11 @@ function SalesInvoicesWorkspace() {
             <div ref={detailRef}>
                 {detail?.status === 'loading' && <LoadingRows rows={4} label={t('si_loading')} />}
                 {detail?.status === 'error' && <ErrorState error={detail.error} onRetry={() => setReloadToken((n) => n + 1)} />}
-                {detail?.status === 'ready' && <SalesInvoiceDetail invoice={detail.data} onChanged={changed} />}
+                {detail?.status === 'ready' && (
+                    <SalesInvoiceDetail invoice={detail.data} onChanged={changed}>
+                        <InvoiceConceptEditor key={detail.data.id} invoice={detail.data} onChanged={changed} onReload={() => setReloadToken((n) => n + 1)} />
+                    </SalesInvoiceDetail>
+                )}
             </div>
         </div>
     );
