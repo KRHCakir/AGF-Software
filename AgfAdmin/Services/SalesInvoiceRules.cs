@@ -41,6 +41,32 @@ namespace AgfAdmin.Services
         // Betalingstermijn als de klant er geen heeft.
         public const int DefaultPaymentTermDays = 14;
         public const string DefaultRevenueTypeName = "Omzet diensten";
+        public const int MaxDeliveriesPerInvoice = 50;
+        public const int MaxLinesPerInvoice = 200;
+        // Eenheid van dienst- en emballageregels.
+        public const string PieceUnit = "piece";
+
+        // Omschrijving van een productregel: product en ras, verpakking, maat en klasse (lege delen weggelaten).
+        public static string Describe(ProductVariant variant, string productName = null)
+        {
+            if (variant == null) return null;
+            var name = string.Join(" ", new[] { productName ?? variant.Product?.Name, variant.Name }.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim()));
+            var parts = new[] { name, variant.Packaging, variant.SizeCategory, string.IsNullOrWhiteSpace(variant.TradeClass) ? null : $"klasse {variant.TradeClass.Trim()}" }
+                .Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim());
+            var text = string.Join(", ", parts);
+            return text.Length > MaxDescriptionLength ? text[..MaxDescriptionLength] : text;
+        }
+
+        // Herkomst op de factuur: de landcode (PE, ZA); zonder code de oude tekst.
+        public static string Origin(ProductVariant variant) =>
+            string.IsNullOrWhiteSpace(variant?.OriginCountryCode) ? (string.IsNullOrWhiteSpace(variant?.Origin) ? null : variant.Origin.Trim()) : variant.OriginCountryCode.Trim();
+
+        // Meerdere partijen of GGN's op één regel, gescheiden door ", ", hooguit max tekens.
+        public static string Join(IEnumerable<string> values, int max)
+        {
+            var text = string.Join(", ", values.Where(v => !string.IsNullOrWhiteSpace(v)));
+            return text.Length == 0 ? null : text.Length > max ? text[..max] : text;
+        }
 
         // VF-2026-00001: doorlopend per jaar, zonder gaten.
         public static string FormatNumber(int year, int sequence) =>
