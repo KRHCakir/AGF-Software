@@ -17,6 +17,7 @@ describe('sales invoice rules', () => {
     test('only priced concepts can be selected, a concept is shown as Concept', () => {
         const item = (over: Partial<SalesInvoiceListItem>) => ({ status: 'Concept', linesWithoutPrice: 0, gross: 10, ...over } as SalesInvoiceListItem);
         assert.equal(selectable(item({})), true);
+        assert.equal(selectable(item({ gross: 0 })), true);
         assert.equal(selectable(item({ linesWithoutPrice: 1 })), false);
         assert.equal(selectable(item({ status: 'Final' })), false);
         assert.equal(invoiceTitle({ invoiceNumber: null, status: 'Concept' }, 'Concept'), 'Concept');
