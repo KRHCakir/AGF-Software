@@ -3581,5 +3581,15 @@
   "si_direct_add_service": "Free line",
   "si_direct_save": "Save draft",
   "si_revenue_type": "Revenue type",
-  "lot_picker_placeholder_required": "Lot number (required)"
+  "lot_picker_placeholder_required": "Lot number (required)",
+  "si_mail_document_name": "Invoice {number}",
+  "settings_revenue_types_title": "Revenue types",
+  "settings_revenue_types_hint": "For service and free lines on a sales invoice. The code is for the ledger account in the accounting package, later.",
+  "settings_revenue_types_default": "Default",
+  "settings_revenue_types_make_default": "Make default",
+  "settings_revenue_types_deactivate": "Set inactive",
+  "settings_revenue_types_activate": "Active again",
+  "settings_revenue_types_name": "New revenue type",
+  "settings_revenue_types_code": "Ledger code (optional)",
+  "settings_revenue_types_add": "Add"
 }

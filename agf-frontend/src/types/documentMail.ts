@@ -43,7 +43,9 @@ export function isMailTemplates(value: unknown): value is MailTemplates {
 // versturen). previousSentAt: een eerdere versie is al verstuurd of doorgegeven.
 export type MailDraftStatus = 'Draft' | 'Sending' | 'Sent' | 'Failed' | 'Discarded' | 'Superseded';
 export interface MailDraft {
-    id: number; salesOrderId: number; orderNumber: string; customerName: string | null; documentId: number; documentKind: string; documentNumber: string;
+    // Verkoopfactuur 1: bij een factuur zijn order en orderdocument leeg (null) en staan invoiceId en invoiceDocumentId ingevuld.
+    id: number; salesOrderId: number | null; orderNumber: string | null; customerName: string | null; documentId: number | null; documentKind: string; documentNumber: string;
+    invoiceId?: number | null; invoiceDocumentId?: number | null;
     documentVersion: number; status: MailDraftStatus; to: string | null; cc: string | null; subject: string; body: string; missingRecipient: string | null;
     missingRelationId: number | null; previousSentAt: string | null; createdAt: string; sentAt: string | null; sentBy: string | null; messageId: string | null;
     lastError: string | null; attempts: number; version: number;
@@ -51,7 +53,7 @@ export interface MailDraft {
 export interface MailStatus { configured: boolean; sender: string }
 
 export function isMailDraft(value: unknown): value is MailDraft {
-    return isObject(value) && isNumber(value.id) && isNumber(value.salesOrderId) && isString(value.orderNumber) && isNumber(value.documentId) && isString(value.documentKind)
+    return isObject(value) && isNumber(value.id) && isNullableNumber(value.salesOrderId) && isNullableString(value.orderNumber) && isNullableNumber(value.documentId) && isString(value.documentKind)
         && isString(value.documentNumber) && isNumber(value.documentVersion) && isString(value.status) && isNullableString(value.to) && isNullableString(value.cc)
         && isString(value.subject) && isString(value.body) && isNullableString(value.missingRecipient) && isNullableNumber(value.missingRelationId)
         && isNullableString(value.previousSentAt) && isNullableString(value.sentAt) && isNullableString(value.lastError) && isNumber(value.version);

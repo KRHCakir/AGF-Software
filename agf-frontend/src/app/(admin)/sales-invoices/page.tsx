@@ -10,6 +10,7 @@ import SalesInvoiceDetail from '../../../components/salesInvoice/SalesInvoiceDet
 import SalesInvoiceList from '../../../components/salesInvoice/SalesInvoiceList';
 import InvoiceConceptEditor from '../../../components/salesInvoice/InvoiceConceptEditor';
 import ToInvoiceList from '../../../components/salesInvoice/ToInvoiceList';
+import { InvoiceMailDrafts } from '../../../components/sales/MailDraftsPanel';
 import { inputClass } from '../../../components/supply/FieldError';
 import { primaryButtonClass, secondaryButtonClass } from '../../../components/supply/SuccessPanel';
 import { useTranslation } from '../../../i18n/LanguageContext';
@@ -200,6 +201,7 @@ function SalesInvoicesWorkspace() {
                         <InvoiceConceptEditor invoice={detail.data} onChanged={changed} onReload={() => setReloadToken((n) => n + 1)} />
                     </SalesInvoiceDetail>
                 )}
+                {detail?.status === 'ready' && detail.data.status === 'Final' && <InvoiceMailDrafts invoiceId={detail.data.id} reloadKey={detail.data.version} />}
             </div>
         </div>
     );

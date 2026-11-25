@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { EmptyState, LoadingRows } from '../../../components/availability/StateViews';
 import ErrorNotice from '../../../components/supply/ErrorNotice';
+import { mailDocumentName } from '../../../components/sales/MailDraftsPanel';
 import { useTranslation } from '../../../i18n/LanguageContext';
 import { formatDateTime } from '../../../lib/availability';
 import { ApiError, toApiError } from '../../../services/apiClient';
@@ -16,7 +17,7 @@ import PageTitle from '../../../components/shared/PageTitle';
 
 // Sorteren (feedback 22 november): de lijst staat als regels zonder kolomkoppen, dus een keuzelijst "Sorteren op". Standaard nieuwste eerst.
 const DRAFT_COLUMNS: SortColumns<MailDraft> = {
-    order: { kind: 'natural', value: (draft) => draft.orderNumber },
+    order: { kind: 'natural', value: (draft) => draft.orderNumber ?? draft.documentNumber },
     customer: { kind: 'text', value: (draft) => draft.customerName },
     document: { kind: 'natural', value: (draft) => draft.documentNumber },
     to: { kind: 'text', value: (draft) => draft.to },
@@ -61,9 +62,11 @@ export default function MailDraftsPage() {
                 <ul className="divide-y divide-gray-200 rounded-md border border-gray-200 bg-white">
                     {rows.map((draft) => (
                         <li key={draft.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm" data-testid="mail-drafts-row">
-                            <Link href={`/sales-orders?orderId=${draft.salesOrderId}`} className="font-semibold text-blue-800 underline">{draft.orderNumber}</Link>
+                            {draft.invoiceId
+                                ? <Link href={`/sales-invoices?id=${draft.invoiceId}`} className="font-semibold text-blue-800 underline">{draft.documentNumber}</Link>
+                                : <Link href={`/sales-orders?orderId=${draft.salesOrderId}`} className="font-semibold text-blue-800 underline">{draft.orderNumber}</Link>}
                             <span>{draft.customerName ?? ''}</span>
-                            <span>{t(draft.documentKind === 'TransportOrder' ? 'so_transport_order_name' : 'so_slip_name', { number: draft.documentNumber, version: String(draft.documentVersion) })}</span>
+                            <span>{mailDocumentName(t, draft)}</span>
                             <span className="text-gray-700">{draft.to || t('mail_no_address')}</span>
                             <span className="rounded bg-gray-100 px-2 py-0.5 text-xs">{t(`mail_status_${draft.status}`)}</span>
                             {draft.missingRecipient && <span className="text-xs text-amber-900">{t('mail_missing_recipient', { name: draft.missingRecipient })}</span>}

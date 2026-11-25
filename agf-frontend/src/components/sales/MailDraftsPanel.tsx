@@ -8,6 +8,7 @@ import { isSimulatedSend } from '../../lib/demoEnvironment';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { discardMailDraft, getMailStatus, getOrderMailDrafts, sendMailDraft, updateMailDraft } from '../../services/documentMailService';
 import { getDocumentPdf } from '../../services/salesOrderDocumentService';
+import { getInvoiceMailDrafts, getSalesInvoicePdf } from '../../services/salesInvoiceService';
 import type { MailDraft, MailStatus } from '../../types/documentMail';
 import type { SalesOrder } from '../../types/salesOrder';
 import ErrorNotice from '../supply/ErrorNotice';
@@ -47,6 +48,40 @@ export default function MailDraftsPanel({ order, reloadKey = 0 }: { order: Sales
     );
 }
 
+// De naam van het document in een mailconcept: laadbon, transportopdracht of (verkoopfactuur 1) factuur.
+export function mailDocumentName(t: (key: string, params?: Record<string, string>) => string, draft: Pick<MailDraft, 'documentKind' | 'documentNumber' | 'documentVersion'>): string {
+    const key = draft.documentKind === 'TransportOrder' ? 'so_transport_order_name' : draft.documentKind === 'Invoice' ? 'si_mail_document_name' : 'so_slip_name';
+    return t(key, { number: draft.documentNumber, version: String(draft.documentVersion) });
+}
+
+// Verkoopfactuur 1: het mailconcept van een definitieve factuur, op het factuurdetail; versturen alleen na een klik, zoals bij de laadbon.
+export function InvoiceMailDrafts({ invoiceId, reloadKey = 0 }: { invoiceId: number; reloadKey?: number }) {
+    const { t } = useTranslation();
+    const [drafts, setDrafts] = useState<MailDraft[] | null>(null);
+    const [status, setStatus] = useState<MailStatus | null>(null);
+    const [error, setError] = useState<ApiError | null>(null);
+    const [token, setToken] = useState(0);
+    useEffect(() => {
+        const controller = new AbortController();
+        setError(null);
+        Promise.all([getInvoiceMailDrafts(invoiceId, controller.signal), getMailStatus(controller.signal)])
+            .then(([found, mail]) => { setDrafts(found); setStatus(mail); })
+            .catch((caught) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setError(apiError); });
+        return () => controller.abort();
+    }, [invoiceId, reloadKey, token]);
+    const shown = drafts?.filter((d) => d.invoiceId === invoiceId) ?? [];
+    if (error === null && shown.length === 0) return null;
+    return (
+        <section aria-labelledby={`si-mail-${invoiceId}`} className="space-y-2 rounded-md border border-gray-300 bg-white px-4 py-3" data-testid="si-mail" data-tour="si-mail">
+            <h3 id={`si-mail-${invoiceId}`} className="font-semibold text-gray-900">{t('mail_drafts_title')}</h3>
+            {error && <ErrorNotice error={error} />}
+            {status && !status.configured && <p role="status" className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm text-amber-950">{t('mail_not_configured')}</p>}
+            {status?.sender === 'Fake' && <p className="text-xs text-gray-600">{t('mail_sender_fake')}</p>}
+            {shown.map((draft) => <MailDraftCard key={`${draft.id}-${draft.version}-${draft.status}-${draft.attempts}`} draft={draft} configured={status?.configured ?? false} onChanged={() => setToken((n) => n + 1)} />)}
+        </section>
+    );
+}
+
 type Confirm = { kind: 'many'; count: number } | { kind: 'resend' } | null;
 // Bevestigingen die in deze verzendpoging al gegeven zijn: ze gaan samen mee, zodat de ene vraag de andere niet ongedaan maakt.
 type Granted = { many: boolean; resend: boolean };
@@ -71,7 +106,7 @@ export function MailDraftCard({ draft, configured, onChanged }: { draft: MailDra
     const open = draft.status === 'Draft' || draft.status === 'Failed';
     const dirty = to !== saved.to || cc !== saved.cc || subject !== saved.subject || body !== saved.body;
     const id = (field: string) => `mail-${draft.id}-${field}`;
-    const name = t(draft.documentKind === 'TransportOrder' ? 'so_transport_order_name' : 'so_slip_name', { number: draft.documentNumber, version: String(draft.documentVersion) });
+    const name = mailDocumentName(t, draft);
 
     const run = async (work: () => Promise<void>) => {
         if (busy) return;
@@ -87,7 +122,7 @@ export function MailDraftCard({ draft, configured, onChanged }: { draft: MailDra
     };
     // Actuele versie van de server ophalen. "Mijn wijzigingen behouden" neemt de nieuwe versie over en houdt alleen de door de gebruiker
     // gewijzigde velden; anders worden de velden vervangen door de actuele tekst. Is het concept inmiddels verzonden of weg: lijst verversen.
-    const fetchCurrent = async () => (await getOrderMailDrafts(draft.salesOrderId)).find((d) => d.id === draft.id);
+    const fetchCurrent = async () => (draft.invoiceId ? await getInvoiceMailDrafts(draft.invoiceId) : await getOrderMailDrafts(draft.salesOrderId!)).find((d) => d.id === draft.id);
     const refresh = (keepMine: boolean) => void run(async () => {
         const found = await fetchCurrent();
         if (!found || (found.status !== 'Draft' && found.status !== 'Failed')) { onChanged(); return; }
@@ -154,7 +189,7 @@ export function MailDraftCard({ draft, configured, onChanged }: { draft: MailDra
         onChanged();
     });
     const pdf = (download: boolean) => void run(async () => {
-        const url = URL.createObjectURL(await getDocumentPdf(draft.salesOrderId, draft.documentId));
+        const url = URL.createObjectURL(draft.invoiceId ? await getSalesInvoicePdf(draft.invoiceId) : await getDocumentPdf(draft.salesOrderId!, draft.documentId!));
         if (!download) { if (preview) URL.revokeObjectURL(preview); setPreview(url); return; }
         const link = window.document.createElement('a');
         link.href = url;
