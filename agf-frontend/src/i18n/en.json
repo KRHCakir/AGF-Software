@@ -1877,7 +1877,7 @@
   "po_line_lines_without_price": "{count} line(s) without price",
   "po_line_col_discount": "Discount %",
   "po_line_col_vat": "VAT",
-  "po_line_vat_none": "– (none)",
+  "po_line_vat_none": "– (from article)",
   "po_line_discount_hint": "empty = no discount",
   "order_amounts_net": "Total excl. VAT",
   "order_amounts_vat_rate": "VAT {rate}% on {net}",
@@ -3620,5 +3620,7 @@
   "tour_sinvoice_price_title": "A draft can still be changed",
   "tour_sinvoice_price_what": "Lines without a price get their price here; quantity, discount and VAT can still change too.",
   "tour_sinvoice_price_why": "As long as a line has no price, the invoice cannot become final.",
-  "si_direct_earlier_saved": "An earlier attempt may already have been saved as a draft, with the details of that moment. Check Sales invoices first; saving again creates a new draft."
+  "si_direct_earlier_saved": "An earlier attempt may already have been saved as a draft, with the details of that moment. Check Sales invoices first; saving again creates a new draft.",
+  "po_line_vat_choose": "Choose…",
+  "si_direct_vat_required": "Choose the VAT rate: 0, 9 or 21%."
 }
