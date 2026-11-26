@@ -1877,7 +1877,7 @@
   "po_line_lines_without_price": "{count} regel(s) zonder prijs",
   "po_line_col_discount": "Korting %",
   "po_line_col_vat": "Btw",
-  "po_line_vat_none": "– (geen)",
+  "po_line_vat_none": "– (van artikel)",
   "po_line_discount_hint": "leeg = geen korting",
   "order_amounts_net": "Totaal excl. btw",
   "order_amounts_vat_rate": "Btw {rate}% over {net}",
@@ -3620,5 +3620,7 @@
   "tour_sinvoice_price_title": "Een concept is nog te wijzigen",
   "tour_sinvoice_price_what": "Regels zonder prijs krijgen hier hun prijs; aantal, korting en btw kunnen ook nog.",
   "tour_sinvoice_price_why": "Zolang er een regel zonder prijs is, kan de factuur niet definitief.",
-  "si_direct_earlier_saved": "Een eerdere poging is mogelijk al opgeslagen als concept, met de gegevens van toen. Kijk eerst in Verkoopfacturen; opnieuw opslaan maakt een nieuw concept."
+  "si_direct_earlier_saved": "Een eerdere poging is mogelijk al opgeslagen als concept, met de gegevens van toen. Kijk eerst in Verkoopfacturen; opnieuw opslaan maakt een nieuw concept.",
+  "po_line_vat_choose": "Kies…",
+  "si_direct_vat_required": "Kies het btw-tarief: 0, 9 of 21%."
 }

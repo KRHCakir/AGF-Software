@@ -46,6 +46,15 @@ describe('direct invoice form', () => {
         assert.ok(mounted.hasText('si_needs_lines'));
     });
 
+    test('on an invoice a product line offers only 0, 9 or 21% VAT and starts with the article rate, never an empty choice', async () => {
+        await render();
+        await type('lines[0].productVariantId-input', 'Ananas');
+        await key('lines[0].productVariantId-input', 'Tab');
+        const vat = mounted.container.querySelector<HTMLSelectElement>('[id="lines[0].vatPercentage-input"]')!;
+        assert.deepEqual(Array.from(vat.options).map((option) => option.value).sort(), ['0', '21', '9']);
+        assert.equal(vat.value, '9');
+    });
+
     test('a product line without a lot is not sent; with the lot and a free line both go to the server', async () => {
         await render();
         await type('customerId-input', 'Marktkraam');

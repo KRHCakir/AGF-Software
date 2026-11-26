@@ -144,7 +144,7 @@ export default function DirectInvoiceForm({ customers, products, serviceArticles
                 <legend className="text-sm font-semibold text-gray-900">{t('si_direct_products')}</legend>
                 <FieldError id="lines" messages={lineErrors('lines')} />
                 <PurchaseOrderLines<SalesLineDraft> lines={lines} rows={rows} products={products} variantOf={variantOf} locked={busy} isDirect={false} withGgn={false}
-                    tourPrefix="si-line" testId="si-direct-lines" errors={(key) => lineErrors(key)} fields={SALES_LINE_FIELDS} currency="EUR" showAmounts={false} extraIsLast
+                    tourPrefix="si-line" testId="si-direct-lines" errors={(key) => lineErrors(key)} fields={SALES_LINE_FIELDS} currency="EUR" showAmounts={false} extraIsLast vatRequired
                     onChange={updateLine} onAdd={addLine} onRemove={removeLine} productExtra={() => null}
                     lineExtra={(line, index, onLastKey) => {
                         const variantId = /^[1-9]\d*$/.test(line.productVariantId) ? Number(line.productVariantId) : null;

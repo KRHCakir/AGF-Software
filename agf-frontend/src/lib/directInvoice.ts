@@ -41,6 +41,8 @@ export function buildDirectLines(products: SalesLineDraft[], services: ServiceDr
         const built = salesLinePayload(line, prefix, articleOf(Number(line.productVariantId)));
         for (const error of built.errors) errors[error.field] = `supply_error_${error.code}`;
         if (!line.partijId) errors[`${prefix}.partijId`] = 'si_direct_lot_required';
+        // Wat op het scherm staat, gaat mee: het gekozen tarief of het voorstel uit het artikel. Geen tarief: eerst kiezen.
+        if (built.payload.vatPercentage == null) errors[`${prefix}.vatPercentage`] = 'si_direct_vat_required';
         value.push({
             lineKind: 'Product', productVariantId: built.payload.productVariantId, partijId: line.partijId ?? null, quantity: built.payload.quantity, unit: built.payload.unit,
             unitPrice: built.payload.unitPrice ?? null, discountPercentage: built.payload.discountPercentage ?? null, vatPercentage: built.payload.vatPercentage ?? null,
@@ -86,6 +88,6 @@ export function formKeyOf(serverKey: string, productIndexes: number[], serviceIn
 // Heeft het formulier bij deze sleutel een plek om de fout te tonen? Zo niet, dan toont het formulier de fout als terugvalmelding.
 export function isShownFormKey(key: string): boolean {
     return /^(customerId|lines)$/.test(key)
-        || /^lines\[\d+\]\.(productVariantId|quantity|unit|grossWeightKg|netWeightKg|partijId)$/.test(key)
+        || /^lines\[\d+\]\.(productVariantId|quantity|unit|grossWeightKg|netWeightKg|partijId|vatPercentage)$/.test(key)
         || /^services\[\d+\]\.(description|costArticleId|quantity|unitPrice|vat|revenueTypeId)$/.test(key);
 }

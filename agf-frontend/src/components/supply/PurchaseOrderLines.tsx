@@ -42,7 +42,7 @@ const linkButton = 'whitespace-nowrap text-xs font-medium text-blue-800 underlin
 // Korting, Btw, GGN; onder de tabel de btw per tarief. Dezelfde component voor de verkooporder: zonder GGN-kolom (`withGgn` onwaar) is
 // Btw het laatste veld, `extraAmounts` telt emballage mee in de btw, en `tourPrefix` geeft de rondleiding haar eigen namen.
 export default function PurchaseOrderLines<D extends PurchaseLineDraft = PurchaseLineDraft>({ lines, rows, products, variantOf, locked, isDirect, errors, onChange, onAdd, onRemove, onNewArticle, productExtra, limits = () => lineLimits(undefined),
-    currency = null, rate = null, ggnProposalOf = () => undefined, withGgn = true, extraAmounts = [], tourPrefix = 'supply-line', testId = 'purchase-lines', showAmounts = true, fields = PURCHASE_LINE_FIELDS, lineExtra = () => null, extraIsLast = false }: {
+    currency = null, rate = null, ggnProposalOf = () => undefined, withGgn = true, extraAmounts = [], tourPrefix = 'supply-line', testId = 'purchase-lines', showAmounts = true, fields = PURCHASE_LINE_FIELDS, lineExtra = () => null, extraIsLast = false, vatRequired = false }: {
     lines: D[];
     // De veldnamen van de server in ids en foutsleutels (lines[i].expectedQuantity bij inkoop, lines[i].quantity bij verkoop).
     fields?: LineFieldNames;
@@ -72,6 +72,8 @@ export default function PurchaseOrderLines<D extends PurchaseLineDraft = Purchas
     lineExtra?: (line: D, index: number, onLastKey: (event: KeyboardEvent<HTMLElement>) => void) => ReactNode;
     // Verkoopfactuur 1: het laatste veld van een regel staat in lineExtra (de verplichte partijkeuze), niet bij Btw.
     extraIsLast?: boolean;
+    // Verkoopfactuur: alleen 0, 9 of 21% (geen lege keuze); het voorstel uit het artikel staat er al. Zonder voorstel: eerst kiezen.
+    vatRequired?: boolean;
     limits?: (key: string) => LineLimits;
     ggnProposalOf?: (line: D) => GgnProposal | undefined;
 }) {
@@ -261,7 +263,9 @@ export default function PurchaseOrderLines<D extends PurchaseLineDraft = Purchas
                                         onChange={(event) => onChange(line.key, { vat: event.target.value, vatTouched: true } as Partial<D>)}
                                         onKeyDown={last === 'vat' ? (event) => onLastField(event, index) : undefined}
                                         className={`${inputClass} !mt-0 w-20 text-right`}>
-                                        <option value="">{t('po_line_vat_none')}</option>
+                                        {vatRequired
+                                            ? row?.vat == null && <option value="" disabled>{t('po_line_vat_choose')}</option>
+                                            : <option value="">{t('po_line_vat_none')}</option>}
                                         {VAT_RATES.map((rate) => <option key={rate} value={String(rate)}>{percent(rate)}%</option>)}
                                     </select>
                                     <FieldError id={`${prefix}.vatPercentage`} messages={errors(`${prefix}.vatPercentage`)} />
