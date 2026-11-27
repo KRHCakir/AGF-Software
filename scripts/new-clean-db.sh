@@ -159,7 +159,8 @@ fi
 
 # Controle: alleen referentietabellen mogen rijen hebben.
 # Verkoopfactuur 1: RevenueTypes krijgt via de migratie AddSalesInvoices de standaard omzetsoort "Omzet diensten".
-reference='^(__EFMigrationsHistory|Countries|PaymentConditions|CompanySettings|CountryAliases|CostArticles|RevenueTypes)$'
+# Ontvangstlocatie (november 2026): StockLocations krijgt bij het opstarten van de API de vaste locatie "Onderweg / direct naar klant".
+reference='^(__EFMigrationsHistory|Countries|PaymentConditions|CompanySettings|CountryAliases|CostArticles|RevenueTypes|StockLocations)$'
 unexpected=""
 summary=""
 while read -r table; do

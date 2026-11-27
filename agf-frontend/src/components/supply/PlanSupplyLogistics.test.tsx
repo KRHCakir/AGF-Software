@@ -29,6 +29,7 @@ describe('purchase order: location and addresses', () => {
         posted = stubFetch({
             onGet: (url) => {
                 gets.push(url);
+                if (url.includes('/stock-locations/receive-defaults')) return json(200, { defaultReceiveLocationId: null, ownWarehouseAddress: 'DEMO-loods' });
                 if (url.includes('/stock-locations')) return json(200, [{ id: 5, name: 'Onderweg naar Griekenland', kind: 'InTransit', address: null, countryCode: 'GR', isActive: true, inUse: false, version: 0 }]);
                 if (url.includes('/address-proposals?vendorId=3')) return json(200, { vendorAddress: 'Fictieve Teler\\nCalle 1, Lima, PE', customerAddress: null });
                 if (url.includes('/address-proposals?customerId=8')) return json(200, { vendorAddress: null, customerAddress: 'Fictieve Klant AE\\nOdos 2, Athene, GR' });
@@ -42,9 +43,12 @@ describe('purchase order: location and addresses', () => {
 
     test('direct trade: a location in transit, we collect at the supplier and deliver at the customer', async () => {
         await mounted.render(<PlanSupplyForm route="Warehouse" reference={reference} onReceive={() => {}} />);
-        await mounted.waitFor(() => tour('supply-receive-location')?.querySelectorAll('option').length === 2, 'locations loaded');
+        // November 2026: Eigen loods staat er als tekst met Afwijkend?; pas dan de lijst (met Onderweg en + Locatie toevoegen).
+        await mounted.waitFor(() => mounted.hasText('DEMO-loods') && tour('supply-receive-location')?.tagName === 'BUTTON', 'default as text');
         await type('vendorId-input', 'tel');
         await key('vendorId-input', 'Enter');
+        await act(async () => { tour('supply-receive-location').click(); });
+        await mounted.waitFor(() => tour('supply-receive-location')?.querySelectorAll('option').length === 3, 'locations listed');
         await act(async () => setSelectValue(tour('supply-receive-location') as unknown as HTMLSelectElement, '5'));
         assert.ok(mounted.hasText('po_logistics_location_in_transit'), 'explains direct trade');
 

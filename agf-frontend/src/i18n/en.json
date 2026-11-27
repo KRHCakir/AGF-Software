@@ -3622,5 +3622,11 @@
   "tour_sinvoice_price_why": "As long as a line has no price, the invoice cannot become final.",
   "si_direct_earlier_saved": "An earlier attempt may already have been saved as a draft, with the details of that moment. Check Sales invoices first; saving again creates a new draft.",
   "po_line_vat_choose": "Choose…",
-  "si_direct_vat_required": "Choose the VAT rate: 0, 9 or 21%."
+  "si_direct_vat_required": "Choose the VAT rate: 0, 9 or 21%.",
+  "po_logistics_location_other": "Different?",
+  "po_logistics_location_back": "Back to default",
+  "po_logistics_location_add": "+ Add location",
+  "stock_location_default_title": "Default receiving location",
+  "stock_location_default_hint": "For a new purchase order, when there is more than one own warehouse.",
+  "stock_location_default_saved": "Default receiving location saved."
 }

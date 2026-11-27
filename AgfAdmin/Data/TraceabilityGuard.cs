@@ -143,6 +143,8 @@ namespace AgfAdmin.Data
     // 46. voorraad van een directe factuur (zie TraceabilityGuard.InvoiceStock.cs): een factuurreservering alleen op een productregel van een
     //    concept, uit de partij van die regel; afboeken met een afboekregel; bij Definitief of Vervallen geen actieve reservering meer.
     //    Regels 5, 6 en 17 tellen factuurreserveringen mee; regel 8 vraagt voor hun afboeking een SalesInvoiceStockLine.
+    // 47. ontvangstlocatie (zie TraceabilityGuard.StockLocations.cs): de laatste actieve Onderweg-locatie blijft actief en Onderweg; de
+    //    standaard ontvangstlocatie is leeg (Eigen loods) of een actieve eigen loods, en blijft dat zolang ze de standaard is.
     // Regels 5 t/m 7 en 10 t/m 12 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
     // 9. een verzendcorrectie is in beide richtingen consistent: een reservering gaat alleen Consumed -> Corrected samen met precies één
     //    correctieregel (exacte kopie van de verzendregel), één nieuwe inhoudsregel in quarantaine op dezelfde pallet met dezelfde partij en
@@ -277,6 +279,7 @@ namespace AgfAdmin.Data
             await CheckServiceLinesAsync(db, async, cancellationToken);
             await CheckLineSplitsAsync(db, async, cancellationToken);
             await CheckStockLocationsAsync(db, async, cancellationToken);
+            await CheckReceiveLocationsAsync(db, async, cancellationToken);
             await CheckLotNumberingAsync(db, async, cancellationToken);
             await CheckSalesDeliveriesAsync(db, async, cancellationToken);
             await CheckLineLotsAsync(db, async, cancellationToken);

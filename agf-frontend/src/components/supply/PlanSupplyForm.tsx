@@ -25,9 +25,11 @@ import { formatDecimalInput } from '../../lib/decimal';
 import { type OrderEdit, type SplitRemainder, isSplit, lineLimits, openQuantityOf, orderEditOf, updateLinePayload } from '../../lib/purchaseOrderEdit';
 import SplitLineDialog, { type SplitQuestion } from './SplitLineDialog';
 import OrderLogisticsFields from './OrderLogisticsFields';
-import { type OrderLogisticsDraft, emptyLogistics, logisticsOf, logisticsPayload } from '../../lib/orderLogistics';
-import { listStockLocations } from '../../services/stockLocationService';
-import type { StockLocation } from '../../types/stockLocation';
+import { type OrderLogisticsDraft, defaultReceiveLocation, emptyLogistics, logisticsOf, logisticsPayload } from '../../lib/orderLogistics';
+import { getReceiveDefaults, listStockLocations } from '../../services/stockLocationService';
+import StockLocationsSetting from '../settings/StockLocationsSetting';
+import SidePanel from '../shared/SidePanel';
+import type { ReceiveDefaults, StockLocation } from '../../types/stockLocation';
 import type { PurchaseOrderDetail, UpdatePurchaseOrderRequest } from '../../types/purchaseOrder';
 import { MAX_NOTE_LENGTH } from '../../lib/purchaseOrderRules';
 import { getNextPartijNumber } from '../../services/partijService';
@@ -178,8 +180,19 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
         setLocationsFailed(false);
         listStockLocations(controller.signal).then(setStockLocations)
             .catch((caught: unknown) => { if (toApiError(caught).kind !== 'aborted') setLocationsFailed(true); });
+        // De standaard ontvangstlocatie en het loodsadres: zonder antwoord blijft Eigen loods de standaard, zonder adres.
+        getReceiveDefaults(controller.signal).then(setReceiveDefaults).catch(() => undefined);
         return () => controller.abort();
     }, [route, locationsAttempt]);
+    // November 2026: bij meer dan één eigen loods krijgt een nieuwe order de standaard ontvangstlocatie, tot de gebruiker zelf kiest.
+    const [receiveDefaults, setReceiveDefaults] = useState<ReceiveDefaults | null>(null);
+    const [locationPanel, setLocationPanel] = useState(false);
+    const receiveTouched = useRef(editing !== null);
+    const defaultLocation = defaultReceiveLocation(stockLocations, receiveDefaults?.defaultReceiveLocationId ?? null);
+    useEffect(() => {
+        if (receiveTouched.current || defaultLocation === '') return;
+        setLogistics((current) => (current.receiveLocationId === '' ? { ...current, receiveLocationId: defaultLocation } : current));
+    }, [defaultLocation]);
     const termTouched = useRef(editing !== null);
     // Valuta-ronde: valuta en koers van de order (euro standaard; bij aanpassen de vastgelegde) en de lijst om uit te kiezen.
     const [money, setMoney] = useState<CurrencyDraft>(() => (editing === null ? euroDraft()
@@ -556,7 +569,8 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
         setPartij(editing === null ? NO_PARTIJ : orderPartij(editing.order));
         termTouched.current = editing !== null;
         setDeliveryTerm(deliveryTermDraftOf(editing?.order.deliveryTerm));
-        setLogistics(editing ? logisticsOf(editing.order) : emptyLogistics());
+        setLogistics(editing ? logisticsOf(editing.order) : { ...emptyLogistics(), receiveLocationId: defaultLocation });
+        receiveTouched.current = editing !== null;
         setPartijExists(null);
         setSuggestionToken((token) => token + 1);
     };
@@ -721,9 +735,17 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
             </div>
 
             {!isDirect && (
-                <OrderLogisticsFields value={logistics} onChange={(next) => { if (locked) return; setLogistics(next); edited(); }} locations={stockLocations}
+                <OrderLogisticsFields value={logistics} locations={stockLocations}
+                    onChange={(next) => { if (locked) return; if (next.receiveLocationId !== logistics.receiveLocationId) receiveTouched.current = true; setLogistics(next); edited(); }}
                     vendorId={header.vendorId === '' ? null : Number(header.vendorId)} customers={reference.customers} locked={locked} errors={e}
-                    locationsFailed={locationsFailed} onRetryLocations={() => setLocationsAttempt((n) => n + 1)} />
+                    locationsFailed={locationsFailed} onRetryLocations={() => setLocationsAttempt((n) => n + 1)}
+                    ownWarehouseAddress={receiveDefaults?.ownWarehouseAddress ?? null} onAddLocation={() => setLocationPanel(true)} />
+            )}
+            {/* + Locatie toevoegen: Instellingen › Voorraadlocaties in een zijpaneel; bij sluiten komt de lijst opnieuw binnen. */}
+            {locationPanel && (
+                <SidePanel title={t('stock_locations_title')} onRequestClose={() => { setLocationPanel(false); setLocationsAttempt((n) => n + 1); }} testId="stock-locations-panel">
+                    <StockLocationsSetting />
+                </SidePanel>
             )}
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">

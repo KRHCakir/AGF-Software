@@ -5,7 +5,7 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { countryLabel } from '../../lib/countries';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { getCountries } from '../../services/countryService';
-import { listStockLocations, saveStockLocation } from '../../services/stockLocationService';
+import { getReceiveDefaults, listStockLocations, saveReceiveDefaults, saveStockLocation } from '../../services/stockLocationService';
 import type { CountryReference } from '../../types/country';
 import { STOCK_LOCATION_KINDS, type StockLocation, type StockLocationKind } from '../../types/stockLocation';
 import CountryPicker from '../shared/CountryPicker';
@@ -92,6 +92,7 @@ export default function StockLocationsSetting() {
                     ))}
                 </ul>
             )}
+            {locations !== null && <DefaultReceiveLocation locations={locations} />}
             {draft === null && (
                 <button type="button" className={secondaryButtonClass} data-tour="stock-location-new" disabled={locations === null}
                     onClick={() => { setSaved(null); setError(null); setDraft(emptyDraft()); }}>{t('stock_location_new')}</button>
@@ -131,5 +132,52 @@ export default function StockLocationsSetting() {
                 </form>
             )}
         </section>
+    );
+}
+
+// November 2026: de standaard ontvangstlocatie van een nieuwe inkooporder. Alleen zichtbaar (en nodig) als er naast de ingebouwde eigen loods
+// nog een actieve eigen loods is; opslaan meteen bij kiezen.
+function DefaultReceiveLocation({ locations }: { locations: readonly StockLocation[] }) {
+    const { t } = useTranslation();
+    const own = locations.filter((location) => location.isActive && location.kind === 'OwnWarehouse');
+    const [value, setValue] = useState<string | null>(null);
+    const [status, setStatus] = useState<'saved' | null>(null);
+    const [error, setError] = useState<ApiError | null>(null);
+    const visible = own.length > 0;
+    useEffect(() => {
+        if (!visible) return;
+        const controller = new AbortController();
+        getReceiveDefaults(controller.signal)
+            .then((defaults) => setValue(defaults.defaultReceiveLocationId === null ? '' : String(defaults.defaultReceiveLocationId)))
+            .catch((caught: unknown) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setError(apiError); });
+        return () => controller.abort();
+    }, [visible]);
+    if (!visible) return null;
+    const choose = async (next: string) => {
+        const previous = value;
+        setValue(next);
+        setStatus(null);
+        setError(null);
+        try {
+            const saved = await saveReceiveDefaults(next === '' ? null : Number(next));
+            setValue(saved.defaultReceiveLocationId === null ? '' : String(saved.defaultReceiveLocationId));
+            setStatus('saved');
+        } catch (caught) {
+            setValue(previous);
+            setError(toApiError(caught));
+        }
+    };
+    return (
+        <div className="rounded border border-gray-200 p-2" data-testid="default-receive-location">
+            <label htmlFor="default-receive-location" className="text-xs font-medium text-gray-700">{t('stock_location_default_title')}</label>
+            <select id="default-receive-location" className={`${inputClass} max-w-sm`} value={value ?? ''} disabled={value === null} data-tour="stock-location-default"
+                onChange={(event) => void choose(event.target.value)}>
+                <option value="">{t('stock_location_own')}</option>
+                {own.map((location) => <option key={location.id} value={String(location.id)}>{location.name}</option>)}
+            </select>
+            <span className="block text-xs text-gray-600">{t('stock_location_default_hint')}</span>
+            {status === 'saved' && <p role="status" className="text-xs text-green-900">{t('stock_location_default_saved')}</p>}
+            {error && <ErrorNotice error={error} />}
+        </div>
     );
 }
