@@ -1,6 +1,9 @@
+// Bewust verborgen: het telefoonscherm voor de verkoper (mobiele verkoop) komt later terug. Er linkt niets meer naartoe; wie het
+// adres met de hand intikt, ziet het nog wel.
 'use client';
 
 import Link from 'next/link';
+import { APP_NAME } from '../../lib/appName';
 
 export default function SalesSelectionPage() {
     // Mock Sellers for MVP
@@ -35,7 +38,7 @@ export default function SalesSelectionPage() {
             </div>
 
             <div className="mt-12 text-center text-gray-400 text-sm">
-                <p>AGF Fast Sales Interface • v0.1</p>
+                <p>{APP_NAME} Fast Sales Interface • v0.1</p>
                 <Link href="/dashboard" className="hover:underline">Back to Admin Dashboard</Link>
             </div>
         </div>

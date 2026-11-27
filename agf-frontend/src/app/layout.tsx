@@ -2,10 +2,11 @@ import './globals.css';
 import type { Metadata } from 'next';
 import DemoEnvironmentBar from '../components/demo/DemoEnvironmentBar';
 import HistoryFirst from '../components/shared/HistoryFirst';
+import { APP_NAME } from '../lib/appName';
 import { demoEnvironmentEnabled, demoRobots } from '../lib/demoEnvironment';
 
 export const metadata: Metadata = {
-  title: 'AGF ERP System',
+  title: APP_NAME,
   description: 'AI-Powered Invoice & Logistics',
   // Alleen in de demo-omgeving: zoekmachines nemen de pagina's niet op (ook X-Robots-Tag, next.config.ts).
   robots: demoRobots(demoEnvironmentEnabled()),

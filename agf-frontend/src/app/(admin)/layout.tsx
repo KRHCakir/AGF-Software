@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import '../globals.css';
@@ -12,6 +11,7 @@ import { CurrentUserProvider, SignedInAs } from '../../components/shared/Current
 import LeaveGuardProvider from '../../components/shared/LeaveGuard';
 import WeightDisplayProvider from '../../components/shared/WeightDisplayProvider';
 import { showDemoAssistant, showLegacyDemoChrome } from '../../lib/featureFlags';
+import AppBrand from '../../components/shared/AppBrand';
 
 function AdminLayoutContent({
     children,
@@ -44,7 +44,7 @@ function AdminLayoutContent({
                     aria-expanded={menuOpen} aria-controls="app-menu-mobile" onClick={() => setMenuOpen((open) => !open)}>
                     {menuOpen ? '✕' : '☰'} {t('nav_menu')}
                 </button>
-                <Link href="/dashboard" className="font-bold text-xl text-blue-800 mr-2 lg:mr-4 tracking-tight shrink-0">AGF<span className="text-gray-600 font-normal">ERP</span></Link>
+                <AppBrand />
                 <div className="hidden min-w-0 flex-1 lg:flex"><TopNav pathname={pathname} /></div>
 
                 <div className="ml-auto flex shrink-0 items-center space-x-3 pl-2 text-gray-500">
