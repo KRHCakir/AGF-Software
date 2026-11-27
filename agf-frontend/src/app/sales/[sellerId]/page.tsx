@@ -1,3 +1,5 @@
+// Bewust verborgen: het telefoonscherm voor de verkoper (mobiele verkoop) komt later terug. Er linkt niets meer naartoe; wie het
+// adres met de hand intikt, ziet het nog wel.
 /* eslint-disable */
 'use client';
 
