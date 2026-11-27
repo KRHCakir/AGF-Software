@@ -80,9 +80,11 @@ export default function ReceiveLocationField({ value, onChange, locations, locke
             <select ref={select} {...fieldProps('logistics.receiveLocationId', errors('logistics.receiveLocationId'))} value={value} data-tour="supply-receive-location"
                 onChange={choose} onKeyDown={keyDown} className={inputClass}>
                 <option value="">{t('stock_location_own')}</option>
-                {locationChoices(locations, value).map((location) => (
-                    <option key={location.id} value={String(location.id)}>{location.name} · {t(`stock_location_kind_${location.kind}`)}</option>
-                ))}
+                {locationChoices(locations, value).map((location) => {
+                    // Geen dubbele tekst als de naam al de soort is (de vaste locatie "Onderweg / direct naar klant").
+                    const kind = t(`stock_location_kind_${location.kind}`);
+                    return <option key={location.id} value={String(location.id)}>{location.name === kind ? location.name : `${location.name} · ${kind}`}</option>;
+                })}
                 {onAddLocation && <option value={ADD}>{t('po_logistics_location_add')}</option>}
             </select>
             <FieldError id="logistics.receiveLocationId" messages={errors('logistics.receiveLocationId')} />
