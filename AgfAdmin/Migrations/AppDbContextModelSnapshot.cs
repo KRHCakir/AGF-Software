@@ -347,6 +347,9 @@ namespace AgfAdmin.Migrations
                         .HasColumnType("character varying(4000)")
                         .HasDefaultValue("");
 
+                    b.Property<int?>("DefaultReceiveLocationId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Email")
                         .HasColumnType("text");
 
@@ -489,6 +492,8 @@ namespace AgfAdmin.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DefaultReceiveLocationId");
 
                     b.ToTable("CompanySettings", t =>
                         {
@@ -7265,6 +7270,14 @@ namespace AgfAdmin.Migrations
                     b.Navigation("PalletContentLine");
 
                     b.Navigation("SupplyCommitment");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.CompanySettings", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.StockLocation", null)
+                        .WithMany()
+                        .HasForeignKey("DefaultReceiveLocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.CountryAlias", b =>

@@ -74,6 +74,8 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
+    // Onderweg / direct naar klant is er altijd (idempotent; zie StockLocationService).
+    await StockLocationService.EnsureInTransitAsync(db);
 
     if (DevelopmentDataSeeder.IsEnabled(app.Environment, app.Configuration))
     {

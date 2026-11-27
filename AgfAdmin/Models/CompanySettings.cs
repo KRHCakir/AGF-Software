@@ -69,5 +69,9 @@ namespace AgfAdmin.Models
         // Certificaten (deel 1): hoeveel dagen vóór de einddatum de app waarschuwt (standaard 30) en de eigen soorten, één per regel.
         public int CertificateWarningDays { get; set; } = Services.CertificateRules.DefaultWarningDays;
         public string CustomCertificateTypes { get; set; } = "";
+
+        // Ontvangstlocatie (november 2026): de standaard voor een nieuwe inkooporder als er meer dan één eigen loods is. Leeg = de ingebouwde
+        // Eigen loods; anders een actieve locatie van de soort OwnWarehouse (guard-regel 47).
+        public int? DefaultReceiveLocationId { get; set; }
     }
 }

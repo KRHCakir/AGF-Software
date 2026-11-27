@@ -1148,6 +1148,7 @@ namespace AgfAdmin.Data
                     "\"Kind\" IN ('OwnWarehouse', 'Supplier', 'Crossdock', 'ExternalStorage', 'InTransit')"));
             });
             modelBuilder.Entity<Pallet>().HasOne(p => p.StockLocation).WithMany().HasForeignKey(p => p.StockLocationId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<CompanySettings>().HasOne<StockLocation>().WithMany().HasForeignKey(c => c.DefaultReceiveLocationId).OnDelete(DeleteBehavior.Restrict);
             modelBuilder.Entity<SupplyCommitment>(b =>
             {
                 b.HasOne(c => c.ReceiveLocation).WithMany().HasForeignKey(c => c.ReceiveLocationId).OnDelete(DeleteBehavior.Restrict);
