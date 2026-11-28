@@ -187,7 +187,8 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
             .catch((caught: unknown) => { if (toApiError(caught).kind !== 'aborted') setDefaultsFailed(true); });
         return () => controller.abort();
     }, [route, locationsAttempt]);
-    // November 2026: bij meer dan één eigen loods krijgt een nieuwe order de standaard ontvangstlocatie, tot de gebruiker zelf kiest.
+    // November 2026: bij meer dan één eigen loods krijgt een nieuwe order de standaard ontvangstlocatie, tot de gebruiker zelf kiest;
+    // een gewijzigde standaard (zijpaneel) vervangt de eerdere standaard zolang de gebruiker niet zelf koos.
     const [receiveDefaults, setReceiveDefaults] = useState<ReceiveDefaults | null>(null);
     const [locationPanel, setLocationPanel] = useState(false);
     const [defaultsFailed, setDefaultsFailed] = useState(false);
@@ -195,7 +196,7 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
     const defaultLocation = defaultReceiveLocation(stockLocations, receiveDefaults?.defaultReceiveLocationId ?? null);
     useEffect(() => {
         if (receiveTouched.current || defaultLocation === '') return;
-        setLogistics((current) => (current.receiveLocationId === '' ? { ...current, receiveLocationId: defaultLocation } : current));
+        setLogistics((current) => (current.receiveLocationId === defaultLocation ? current : { ...current, receiveLocationId: defaultLocation }));
     }, [defaultLocation]);
     const termTouched = useRef(editing !== null);
     // Valuta-ronde: valuta en koers van de order (euro standaard; bij aanpassen de vastgelegde) en de lijst om uit te kiezen.
