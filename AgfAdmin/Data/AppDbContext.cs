@@ -121,13 +121,13 @@ namespace AgfAdmin.Data
             EnsureInvoiceNumberKeys();
             EnsureShortcutKeys();
             var lotKeys = Database.IsNpgsql() ? TraceabilityGuard.LotNumberKeysToLock(this) : new List<string>();
-            if (lotKeys.Count == 0 && !TraceabilityGuard.NeedsInvoiceStockTransaction(this))
+            if (lotKeys.Count == 0 && !TraceabilityGuard.NeedsInvoiceStockTransaction(this) && !TraceabilityGuard.NeedsReceiveLocationTransaction(this))
             {
                 TraceabilityGuard.Validate(this);
                 IncrementVersions();
                 return base.SaveChanges(acceptAllChangesOnSuccess);
             }
-            // Regel 41 en 46: nummerlock, factuurrijslot en controle horen in dezelfde transactie als het opslaan.
+            // Regel 41, 46 en 47: nummerlock, factuurrijslot, locatieslot en controle horen in dezelfde transactie als het opslaan.
             using var transaction = Database.CurrentTransaction == null ? Database.BeginTransaction() : null;
             TraceabilityGuard.LockLotNumbersAsync(this, lotKeys, async: false, CancellationToken.None).GetAwaiter().GetResult();
             TraceabilityGuard.Validate(this);
@@ -147,13 +147,13 @@ namespace AgfAdmin.Data
             EnsureInvoiceNumberKeys();
             EnsureShortcutKeys();
             var lotKeys = Database.IsNpgsql() ? TraceabilityGuard.LotNumberKeysToLock(this) : new List<string>();
-            if (lotKeys.Count == 0 && !TraceabilityGuard.NeedsInvoiceStockTransaction(this))
+            if (lotKeys.Count == 0 && !TraceabilityGuard.NeedsInvoiceStockTransaction(this) && !TraceabilityGuard.NeedsReceiveLocationTransaction(this))
             {
                 await TraceabilityGuard.ValidateAsync(this, cancellationToken);
                 IncrementVersions();
                 return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
             }
-            // Regel 41 en 46: nummerlock, factuurrijslot en controle horen in dezelfde transactie als het opslaan.
+            // Regel 41, 46 en 47: nummerlock, factuurrijslot, locatieslot en controle horen in dezelfde transactie als het opslaan.
             await using var transaction = Database.CurrentTransaction == null ? await Database.BeginTransactionAsync(cancellationToken) : null;
             await TraceabilityGuard.LockLotNumbersAsync(this, lotKeys, async: true, cancellationToken);
             await TraceabilityGuard.ValidateAsync(this, cancellationToken);
