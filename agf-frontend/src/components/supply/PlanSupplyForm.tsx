@@ -195,7 +195,8 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
     const receiveTouched = useRef(editing !== null);
     const defaultLocation = defaultReceiveLocation(stockLocations, receiveDefaults?.defaultReceiveLocationId ?? null);
     useEffect(() => {
-        if (receiveTouched.current || defaultLocation === '') return;
+        // Ook terug naar Eigen loods ('') als de standaard daarnaar is gezet, zolang de gebruiker niet zelf koos.
+        if (receiveTouched.current) return;
         setLogistics((current) => (current.receiveLocationId === defaultLocation ? current : { ...current, receiveLocationId: defaultLocation }));
     }, [defaultLocation]);
     const termTouched = useRef(editing !== null);
