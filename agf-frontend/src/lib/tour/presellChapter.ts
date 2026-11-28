@@ -38,6 +38,11 @@ export const PRESELL_CHAPTER: TourChapter = {
             { kind: 'wait', target: 'sales-line-shortage:0' },
             { kind: 'highlight', target: 'sales-line-shortage:0' },
         ]),
+        // Goederen direct naar de klant: geen aparte route meer (feedback 22 november). Een inkooporder met ontvangstlocatie Direct naar klant
+        // (onderweg) verkoop je ook met Uit verwachte aanvoer; na ontvangst (Afgeleverd) reserveer en lever je de regel zoals altijd.
+        presell('direct', '/sales-orders', [
+            { kind: 'highlight', target: 'sales-line-source:Expected' },
+        ]),
         presell('save', '/sales-orders', [
             { kind: 'click', target: 'sales-save' },
             { kind: 'wait', target: 'sales-saved-number' },

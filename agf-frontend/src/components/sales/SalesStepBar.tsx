@@ -10,6 +10,8 @@ export default function SalesStepBar({ order }: { order: SalesOrder }) {
     const { t } = useTranslation();
     const next = salesNextStep(order);
     if (next === 'cancelled') return null;
+    // Alleen oude directe handel te verzenden (geen magazijnreservering): dan wijst de zin naar "Oude directe handel verzenden".
+    const onlyOldDirect = next === 'dispatch' && !order.lines.some((line) => line.reservedQuantity > 0);
     return (
         <div className="rounded-md border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-950" data-tour="sales-steps" data-tour-key={next}>
             <ol className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -24,7 +26,7 @@ export default function SalesStepBar({ order }: { order: SalesOrder }) {
                     );
                 })}
             </ol>
-            <p className="mt-0.5 text-xs">{t(`sales_next_${next}`)}</p>
+            <p className="mt-0.5 text-xs">{t(onlyOldDirect ? 'sales_next_dispatch_old_direct' : `sales_next_${next}`)}</p>
         </div>
     );
 }

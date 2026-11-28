@@ -278,9 +278,6 @@ function SalesWorkspace() {
 
             {hydrated && <PendingCommandsBanner commands={commands} onGoTo={goToCommand} />}
 
-            <p className="flex flex-wrap items-center gap-2 rounded border border-violet-300 bg-violet-50 px-3 py-2 text-sm text-violet-900">
-                <span aria-hidden="true">🔒</span>{t('sales_direct_trade_note')}
-            </p>
             <AwaitingStockList token={ordersToken} onReserve={openFifo} />
             </div>
 
