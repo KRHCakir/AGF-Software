@@ -85,6 +85,11 @@ namespace AgfAdmin.Services
             {
                 return ServiceResult<StockLocationDto>.Conflict("This stock location has been changed in the meantime; reload it first.");
             }
+            catch (TraceabilityViolationException exception)
+            {
+                // De controles hierboven zijn al gedaan; de guard (regel 47) weigert alleen nog bij een gelijktijdige wijziging: een conflict.
+                return ServiceResult<StockLocationDto>.Conflict(exception.Message);
+            }
             return ServiceResult<StockLocationDto>.Ok(ToDto(location, inUse));
         }
 
@@ -115,7 +120,14 @@ namespace AgfAdmin.Services
                 _db.CompanySettings.Add(settings);
             }
             settings.DefaultReceiveLocationId = id;
-            await _db.SaveChangesAsync(cancellationToken);
+            try
+            {
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+            catch (TraceabilityViolationException exception)
+            {
+                return ServiceResult<ReceiveDefaultsDto>.Conflict(exception.Message);
+            }
             return ServiceResult<ReceiveDefaultsDto>.Ok(await ReceiveDefaultsAsync(cancellationToken));
         }
 
@@ -127,7 +139,7 @@ namespace AgfAdmin.Services
             await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
             if (db.Database.IsNpgsql())
             {
-                await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({EnsureLockClass}, 1)", cancellationToken);
+                await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({StockLocationRules.LockClass}, 1)", cancellationToken);
             }
             if (await db.StockLocations.AnyAsync(l => l.IsActive && l.Kind == StockLocationRules.KindInTransit, cancellationToken))
             {
@@ -153,8 +165,6 @@ namespace AgfAdmin.Services
             await transaction.CommitAsync(cancellationToken);
             return true;
         }
-
-        private const int EnsureLockClass = 47047;
 
         // Locaties waar een pallet of inkooporder naar wijst.
         private async Task<HashSet<int>> UsedAsync(List<int> ids, CancellationToken cancellationToken)

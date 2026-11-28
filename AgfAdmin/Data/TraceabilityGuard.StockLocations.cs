@@ -52,6 +52,11 @@ namespace AgfAdmin.Data
             }
         }
     
+        // Regel 47 leest onder een slot; dat werkt alleen binnen een transactie (zoals regel 41 en 46).
+        internal static bool NeedsReceiveLocationTransaction(AppDbContext db) => db.Database.IsNpgsql()
+            && (db.ChangeTracker.Entries<StockLocation>().Any(e => e.State == EntityState.Modified)
+                || db.ChangeTracker.Entries<CompanySettings>().Any(e => e.State is EntityState.Added or EntityState.Modified));
+
         // ---- Regel 47: ontvangstlocatie (november 2026, zie StockLocationService) ----
         //
         // 1. Onderweg / direct naar klant is er altijd: de laatste actieve locatie van de soort InTransit wordt niet inactief en verandert
@@ -63,6 +68,14 @@ namespace AgfAdmin.Data
             var modified = db.ChangeTracker.Entries<StockLocation>().Where(e => e.State == EntityState.Modified).ToList();
             var settings = db.ChangeTracker.Entries<CompanySettings>().Where(e => e.State is EntityState.Added or EntityState.Modified).Select(e => e.Entity).ToList();
             if (modified.Count == 0 && settings.Count == 0) return;
+            // Gelijktijdige wijzigingen (review): twee schrijvers die elk een andere Onderweg-locatie inactief zetten, of de standaard kiezen
+            // terwijl een ander die locatie inactief zet, wachten op elkaar en lezen daarna de echte toestand. AppDbContext opent hiervoor een
+            // transactie als de schrijver dat niet deed (NeedsReceiveLocationTransaction).
+            if (db.Database.IsNpgsql() && db.Database.CurrentTransaction != null)
+            {
+                if (async) await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({StockLocationRules.LockClass}, 1)", cancellationToken);
+                else db.Database.ExecuteSqlInterpolated($"SELECT pg_advisory_xact_lock({StockLocationRules.LockClass}, 1)");
+            }
 
             bool ActiveKind(StockLocation l, string kind) => l.IsActive && string.Equals(l.Kind, kind, StringComparison.Ordinal);
             var leaving = modified.Where(e => e.Property(l => l.IsActive).OriginalValue && string.Equals(e.Property(l => l.Kind).OriginalValue, StockLocationRules.KindInTransit, StringComparison.Ordinal)
