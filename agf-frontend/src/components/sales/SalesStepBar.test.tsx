@@ -27,6 +27,14 @@ describe('SalesStepBar', () => {
         assert.ok(mounted.hasText('sales_next_done'));
     });
 
+    test('with only old direct trade to ship the sentence points to Oude directe handel verzenden, not to Verzenden', async () => {
+        await mounted.render(<SalesStepBar order={order([line({ allocatedQuantity: 15 })])} />);
+        assert.equal(current(), '2. sales_step_dispatch');
+        assert.ok(mounted.hasText('sales_next_dispatch_old_direct'));
+        await mounted.render(<SalesStepBar order={order([line({ allocatedQuantity: 15, reservedQuantity: 4 })])} />);
+        assert.equal(mounted.container.querySelector('p')?.textContent, 'sales_next_dispatch');
+    });
+
     test('nothing on a cancelled order', async () => {
         await mounted.render(<SalesStepBar order={order([line({ openQuantity: 4 })], { status: 'Cancelled' })} />);
         assert.equal(mounted.container.textContent, '');

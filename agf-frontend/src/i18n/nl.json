@@ -2190,6 +2190,7 @@
   "sales_step_confirm": "Aflevering bevestigen",
   "sales_next_reserve": "Volgende stap: per regel goedgekeurde voorraad reserveren (\"Voorraad kiezen en reserveren\").",
   "sales_next_dispatch": "Volgende stap: de gereserveerde voorraad verzenden (\"Verzenden\" bovenaan).",
+  "sales_next_dispatch_old_direct": "Volgende stap: de oude directe handel verzenden (\"Oude directe handel verzenden\" bovenaan).",
   "sales_next_confirm": "Volgende stap: alles is verzonden; bevestig de aflevering bij de verzending.",
   "sales_next_done": "Alles is verzonden en afgeleverd. De factuur komt in een volgende versie.",
   "availability_view_sales": "Verkoop",

@@ -2190,6 +2190,7 @@
   "sales_step_confirm": "Confirm delivery",
   "sales_next_reserve": "Next step: reserve approved stock per line (\"Choose stock and reserve\").",
   "sales_next_dispatch": "Next step: dispatch the reserved stock (\"Dispatch\" at the top).",
+  "sales_next_dispatch_old_direct": "Next step: ship the old direct trade (\"Ship old direct trade\" at the top).",
   "sales_next_confirm": "Next step: everything is dispatched; confirm delivery on the dispatch.",
   "sales_next_done": "Everything is dispatched and delivered. The invoice comes in a later version.",
   "availability_view_sales": "Sales",
