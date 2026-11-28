@@ -71,9 +71,16 @@ export default function PurchaseOrderDocument({ order, onChanged }: { order: Pur
     if (order.editable === false) return null;
     return (
         <div className="mt-2 space-y-2" data-testid="po-document">
-            <div className="flex flex-wrap gap-2">
+            {/* November 2026: Definitief maken staat apart van Aanpassen, met een slot, zodat hij niet als "opslaan" wordt gezien. */}
+            <div className="flex flex-wrap items-center gap-2">
                 <Link href={`/purchase-orders/edit?id=${order.id}`} className={secondaryButtonClass} data-tour="po-edit">{t('po_edit')}</Link>
-                <button type="button" className={secondaryButtonClass} data-tour="po-finalize" disabled={busy || confirming} onClick={() => setConfirming(true)}>{t('po_finalize')}</button>
+                <span aria-hidden="true" className="mx-2 h-6 border-l border-gray-300" />
+                <button type="button" className={`${secondaryButtonClass} inline-flex items-center gap-1.5`} data-tour="po-finalize" disabled={busy || confirming} onClick={() => setConfirming(true)}>
+                    <svg aria-hidden="true" data-testid="po-finalize-lock" viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+                        <rect x="4" y="9" width="12" height="8" rx="1.5" /><path d="M7 9V6.5a3 3 0 0 1 6 0V9" strokeLinecap="round" />
+                    </svg>
+                    {t('po_finalize')}
+                </button>
             </div>
             {confirming && (
                 <div role="group" aria-label={t('po_finalize')} className="rounded border border-slate-400 bg-slate-50 px-3 py-2 text-sm text-slate-900" data-testid="po-finalize-question">

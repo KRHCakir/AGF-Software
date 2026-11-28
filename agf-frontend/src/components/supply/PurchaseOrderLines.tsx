@@ -256,13 +256,13 @@ export default function PurchaseOrderLines<D extends PurchaseLineDraft = Purchas
                                         className={`${inputClass} !mt-0 w-16 text-right`} />
                                     <FieldError id={`${prefix}.discountPercentage`} messages={errors(`${prefix}.discountPercentage`)} />
                                 </td>
-                                <td {...lineCell('vat', labels.vat, 'min-w-[5.5rem]')}>
+                                <td {...lineCell('vat', labels.vat, 'min-w-[6.5rem]')}>
                                     <label htmlFor={`${prefix}.vatPercentage-input`} className="sr-only">{labels.vat} {index + 1}</label>
                                     <select {...fieldProps(`${prefix}.vatPercentage`, errors(`${prefix}.vatPercentage`))} value={row?.vat == null ? '' : String(row.vat)} disabled={locked}
                                         data-tour={`${tourPrefix}-vat`} data-tour-key={index}
                                         onChange={(event) => onChange(line.key, { vat: event.target.value, vatTouched: true } as Partial<D>)}
                                         onKeyDown={last === 'vat' ? (event) => onLastField(event, index) : undefined}
-                                        className={`${inputClass} !mt-0 w-20 text-right`}>
+                                        className={`${inputClass} !mt-0 w-24 text-right`}>
                                         {vatRequired
                                             ? row?.vat == null && <option value="" disabled>{t('po_line_vat_choose')}</option>
                                             : <option value="">{t('po_line_vat_none')}</option>}

@@ -46,8 +46,11 @@ describe('purchase order invoices', () => {
 
     test('the chain strip shows the invoice step with links; the list shows the billing badge', async () => {
         const invoice = purchaseOrderChain(order(), 'order').find((step) => step.key === 'invoice')!;
-        assert.deepEqual([invoice.state, invoice.parts[0].key, invoice.links.map((link) => link.href)], ['partial', 'chain_billing_partial', ['/purchase-invoices?id=90']]);
-        assert.equal(purchaseOrderChain(order({ billingStatus: 'Full' }), 'order').find((step) => step.key === 'invoice')!.state, 'done');
+        // November 2026: zolang niet alles gefactureerd is, is de stap klikbaar naar Factuur invoeren (voorgevuld met deze order).
+        assert.deepEqual([invoice.state, invoice.parts[0].key, invoice.links.map((link) => link.href)], ['partial', 'chain_billing_partial', ['/purchase-invoices/new?orderId=56', '/purchase-invoices?id=90']]);
+        assert.equal(invoice.links[0].key, 'chain_invoice_action');
+        const full = purchaseOrderChain(order({ billingStatus: 'Full' }), 'order').find((step) => step.key === 'invoice')!;
+        assert.deepEqual([full.state, full.links.map((link) => link.href)], ['done', ['/purchase-invoices?id=90']]);
         assert.equal(purchaseOrderChain(order({ billingStatus: undefined }), 'order').find((step) => step.key === 'invoice')!.state, 'unavailable', 'an older server: not yet');
 
         const item = (over: Partial<PurchaseOrderListItem>): PurchaseOrderListItem => ({

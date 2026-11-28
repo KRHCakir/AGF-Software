@@ -126,37 +126,74 @@ export default function OrderLogisticsFields({ value, onChange, locations, vendo
         }
     };
 
+    // Een andere ontvangstlocatie. Van Direct naar klant naar een locatie: het afleveradres en de klant horen bij die route en vervallen (bij
+    // opslaan leeg). Kan de lijst niet geladen worden, dan weten we de soort niet en wissen we niets.
+    const chooseLocation = (id: string) => {
+        const wasInTransit = isInTransit(locations, latest.current.receiveLocationId);
+        const next = { ...latest.current, receiveLocationId: id };
+        if (wasInTransit && !isInTransit(locations, id)) {
+            cancelCustomerRequest();
+            setCustomerId('');
+            next.deliveryAddress = '';
+        }
+        latest.current = next;
+        onChange(next);
+    };
+    // Een afleveradres zonder Direct naar klant (van vóór november 2026): nooit stil weg, wel zichtbaar met Leegmaken.
+    const earlierDelivery = !inTransit && value.deliveryAddress.trim() !== '';
+
     return (
-        <fieldset className="grid grid-cols-1 gap-3 rounded border border-gray-200 p-2 md:grid-cols-3" data-tour="supply-logistics">
+        <fieldset className="grid grid-cols-1 gap-3 rounded border border-gray-200 p-2 md:grid-cols-2" data-tour="supply-logistics">
             <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-gray-600">{t('po_logistics_title')}</legend>
-            <ReceiveLocationField value={value.receiveLocationId} onChange={(id) => onChange({ ...latest.current, receiveLocationId: id })} locations={locations}
-                locked={locked} errors={errors} ownWarehouseAddress={ownWarehouseAddress} locationsFailed={locationsFailed} onRetryLocations={onRetryLocations}
-                onAddLocation={onAddLocation} defaultFailed={defaultFailed} />
+            {/* Waar het vandaan komt: standaard levert de leverancier; alleen bij Wij halen op een adres. */}
             <div>
-                <label htmlFor="logistics.loadingAddress-input" className="text-xs font-medium text-gray-700">{t('po_logistics_loading')}</label>
-                <label className="mt-1 flex items-center gap-2 text-xs text-gray-800">
+                <span className="block text-xs font-medium text-gray-700">{t('po_logistics_loading')}</span>
+                <label className="mt-1 flex min-h-8 items-center gap-2 text-sm text-gray-800">
                     <input type="checkbox" checked={value.pickUp} disabled={locked} data-tour="supply-pick-up" onChange={(event) => void pickUp(event.target.checked)} />
                     {t('po_logistics_pick_up')}
                 </label>
-                <textarea {...fieldProps('logistics.loadingAddress', errors('logistics.loadingAddress'))} rows={3} maxLength={500} value={value.loadingAddress} disabled={locked}
-                    placeholder={t('po_logistics_loading_placeholder')} data-tour="supply-loading-address" className={inputClass}
-                    onChange={(event) => onChange({ ...value, loadingAddress: event.target.value })} />
-                <FieldError id="logistics.loadingAddress" messages={errors('logistics.loadingAddress')} />
+                {value.pickUp ? (
+                    <>
+                        <label htmlFor="logistics.loadingAddress-input" className="sr-only">{t('po_logistics_loading')}</label>
+                        <textarea {...fieldProps('logistics.loadingAddress', errors('logistics.loadingAddress'))} rows={3} maxLength={500} value={value.loadingAddress} disabled={locked}
+                            placeholder={t('po_logistics_loading_placeholder')} data-tour="supply-loading-address" className={inputClass}
+                            onChange={(event) => onChange({ ...value, loadingAddress: event.target.value })} />
+                        <FieldError id="logistics.loadingAddress" messages={errors('logistics.loadingAddress')} />
+                    </>
+                ) : <span className="block text-xs text-gray-500" data-testid="logistics-vendor-delivers">{t('po_logistics_vendor_delivers')}</span>}
             </div>
+            {/* Waar het binnenkomt, of bij Direct naar klant: naar welke klant. */}
             <div>
-                <label htmlFor="logistics.deliveryAddress-input" className="text-xs font-medium text-gray-700">{t('po_logistics_delivery')}</label>
-                {inTransit && !locked && (
-                    <div className="mt-1 text-xs text-gray-800">
-                        <span className="block">{t('po_logistics_customer')}</span>
-                        <CustomerPicker id="logistics.customer" customers={customers} value={customerId} onChange={(customer) => void chooseCustomer(customer)} dataTour="supply-delivery-customer" />
+                <ReceiveLocationField value={value.receiveLocationId} onChange={chooseLocation} locations={locations}
+                    locked={locked} errors={errors} ownWarehouseAddress={ownWarehouseAddress} locationsFailed={locationsFailed} onRetryLocations={onRetryLocations}
+                    onAddLocation={onAddLocation} defaultFailed={defaultFailed} />
+                {inTransit && (
+                    <div className="mt-2" data-testid="logistics-delivery-customer">
+                        <label htmlFor="logistics.deliveryAddress-input" className="text-xs font-medium text-gray-700">{t('po_logistics_delivery_customer')}</label>
+                        {!locked && (
+                            <div className="mt-1 text-xs text-gray-800">
+                                <span className="block">{t('po_logistics_customer')}</span>
+                                <CustomerPicker id="logistics.customer" customers={customers} value={customerId} onChange={(customer) => void chooseCustomer(customer)} dataTour="supply-delivery-customer" />
+                            </div>
+                        )}
+                        <textarea {...fieldProps('logistics.deliveryAddress', errors('logistics.deliveryAddress'))} rows={3} maxLength={500} value={value.deliveryAddress} disabled={locked}
+                            placeholder={t('po_logistics_delivery_customer_placeholder')} data-tour="supply-delivery-address" className={inputClass}
+                            onChange={(event) => { cancelCustomerRequest(); onChange({ ...value, deliveryAddress: event.target.value }); }} />
+                        <FieldError id="logistics.deliveryAddress" messages={errors('logistics.deliveryAddress')} />
                     </div>
                 )}
-                <textarea {...fieldProps('logistics.deliveryAddress', errors('logistics.deliveryAddress'))} rows={3} maxLength={500} value={value.deliveryAddress} disabled={locked}
-                    placeholder={t('po_logistics_delivery_placeholder')} data-tour="supply-delivery-address" className={inputClass}
-                    onChange={(event) => { cancelCustomerRequest(); onChange({ ...value, deliveryAddress: event.target.value }); }} />
-                <FieldError id="logistics.deliveryAddress" messages={errors('logistics.deliveryAddress')} />
+                {earlierDelivery && (
+                    <div className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-gray-800" data-testid="logistics-delivery-earlier">
+                        <span className="block font-medium">{t('po_logistics_delivery_earlier')}</span>
+                        <span className="block whitespace-pre-line">{value.deliveryAddress}</span>
+                        {!locked && (
+                            <button type="button" className="mt-1 text-blue-800 underline underline-offset-2" data-testid="logistics-delivery-clear"
+                                onClick={() => onChange({ ...latest.current, deliveryAddress: '' })}>{t('po_logistics_delivery_clear')}</button>
+                        )}
+                    </div>
+                )}
             </div>
-            {problem && <p role="status" className="text-xs text-amber-900 md:col-span-3">{problem}</p>}
+            {problem && <p role="status" className="text-xs text-amber-900 md:col-span-2">{problem}</p>}
         </fieldset>
     );
 }

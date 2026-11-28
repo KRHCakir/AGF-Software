@@ -1877,7 +1877,7 @@
   "po_line_lines_without_price": "{count} line(s) without price",
   "po_line_col_discount": "Discount %",
   "po_line_col_vat": "VAT",
-  "po_line_vat_none": "– (from article)",
+  "po_line_vat_none": "Article",
   "po_line_discount_hint": "empty = no discount",
   "order_amounts_net": "Total excl. VAT",
   "order_amounts_vat_rate": "VAT {rate}% on {net}",
@@ -2447,7 +2447,7 @@
   "stock_location_kind_Supplier": "Supplier",
   "stock_location_kind_Crossdock": "Cross-dock",
   "stock_location_kind_ExternalStorage": "External storage",
-  "stock_location_kind_InTransit": "In transit / straight to customer",
+  "stock_location_kind_InTransit": "Direct to customer (in transit)",
   "stock_location_kind_fixed": "Pallets or purchase orders use this location: the kind is fixed.",
   "stock_location_name": "Name",
   "stock_location_address": "Name and address (as on the transport order)",
@@ -3629,5 +3629,11 @@
   "stock_location_default_title": "Default receiving location",
   "stock_location_default_hint": "For a new purchase order, when there is more than one own warehouse.",
   "stock_location_default_saved": "Default receiving location saved.",
-  "po_logistics_default_failed": "The default receiving location could not be loaded. Choose the right warehouse yourself, or try again."
+  "po_logistics_default_failed": "The default receiving location could not be loaded. Choose the right warehouse yourself, or try again.",
+  "po_logistics_vendor_delivers": "The supplier delivers.",
+  "po_logistics_delivery_customer": "Customer delivery address",
+  "po_logistics_delivery_customer_placeholder": "Name and address of the customer",
+  "po_logistics_delivery_earlier": "Delivery address (entered earlier)",
+  "po_logistics_delivery_clear": "Clear",
+  "chain_invoice_action": "Enter invoice"
 }

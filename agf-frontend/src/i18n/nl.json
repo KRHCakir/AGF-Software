@@ -1877,7 +1877,7 @@
   "po_line_lines_without_price": "{count} regel(s) zonder prijs",
   "po_line_col_discount": "Korting %",
   "po_line_col_vat": "Btw",
-  "po_line_vat_none": "– (van artikel)",
+  "po_line_vat_none": "Artikel",
   "po_line_discount_hint": "leeg = geen korting",
   "order_amounts_net": "Totaal excl. btw",
   "order_amounts_vat_rate": "Btw {rate}% over {net}",
@@ -2447,7 +2447,7 @@
   "stock_location_kind_Supplier": "Leverancier",
   "stock_location_kind_Crossdock": "Cross-dock",
   "stock_location_kind_ExternalStorage": "Externe opslag",
-  "stock_location_kind_InTransit": "Onderweg / direct naar klant",
+  "stock_location_kind_InTransit": "Direct naar klant (onderweg)",
   "stock_location_kind_fixed": "Pallets of inkooporders gebruiken deze locatie: de soort ligt vast.",
   "stock_location_name": "Naam",
   "stock_location_address": "Naam en adres (zoals op de transportopdracht)",
@@ -3629,5 +3629,11 @@
   "stock_location_default_title": "Standaard ontvangstlocatie",
   "stock_location_default_hint": "Voor een nieuwe inkooporder, als er meer dan één eigen loods is.",
   "stock_location_default_saved": "Standaard ontvangstlocatie opgeslagen.",
-  "po_logistics_default_failed": "De standaard ontvangstlocatie kon niet geladen worden. Kies zelf de juiste loods, of probeer het opnieuw."
+  "po_logistics_default_failed": "De standaard ontvangstlocatie kon niet geladen worden. Kies zelf de juiste loods, of probeer het opnieuw.",
+  "po_logistics_vendor_delivers": "De leverancier levert.",
+  "po_logistics_delivery_customer": "Afleveradres klant",
+  "po_logistics_delivery_customer_placeholder": "Naam en adres van de klant",
+  "po_logistics_delivery_earlier": "Afleveradres (eerder ingevuld)",
+  "po_logistics_delivery_clear": "Leegmaken",
+  "chain_invoice_action": "Factuur invoeren"
 }

@@ -12,7 +12,8 @@ import type { PurchaseOrderDetail as Order, PurchaseOrderHistoryEvent } from '..
 import { getPurchaseOrder } from '../../services/purchaseOrderService';
 import PartijLinkPanel from '../partij/PartijLinkPanel';
 import ChainStrip from '../shared/ChainStrip';
-import { primaryButtonClass } from '../supply/SuccessPanel';
+import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
+import { canReceive, invoiceButton, invoiceEntryHref } from '../../lib/purchaseOrderNextStep';
 import { DocumentStatusBadge, InvoiceIndicatorBadge, OrderStatusBadge, BillingStatusBadge } from './PurchaseOrderBadges';
 import PurchaseOrderDocument, { PurchaseOrderChanges } from './PurchaseOrderDocument';
 import DeviationsSection from './DeviationsSection';
@@ -40,8 +41,10 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
     invoices?: React.ReactNode;
 }) {
     const { t, locale } = useTranslation();
-    // Volgende stap: ontvangen, zolang er van een inkooporder voor het eigen magazijn nog iets openstaat.
-    const receivable = order.route === 'Warehouse' && order.status !== 'Cancelled' && order.storedStatus !== 'Cancelled' && order.lines.some((line) => line.receivedQuantity < line.expectedQuantity);
+    // Volgende stap: ontvangen, zolang er van een inkooporder voor het eigen magazijn nog iets openstaat; daarnaast Factuur invoeren, die de
+    // hoofdknop wordt zodra alles ontvangen is (november 2026).
+    const receivable = canReceive(order);
+    const invoice = invoiceButton(order);
     const label = (keys: Readonly<Record<string, string>>, value: string | null) => { const key = labelKey(keys, value); return key ? t(key) : (value ?? '–'); };
     const qty = (value: number) => formatQuantity(value, locale);
     const labels = usePurchaseLineLabels();
@@ -59,8 +62,14 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                     <h2 id="po-detail-title" data-tour="po-detail-number" className="min-w-0 text-2xl font-bold text-gray-900">
                         <OrderNumberText orderNumber={order.orderNumber} supplierReference={order.supplierReference} stacked />
                     </h2>
-                    {receivable && (
-                        <Link href={`/receipts?order=${order.id}`} data-tour="po-receive" className={`${primaryButtonClass} ml-auto`}>{t('po_receive')}</Link>
+                    {(receivable || invoice !== null) && (
+                        <span className="ml-auto flex flex-wrap gap-2">
+                            {receivable && <Link href={`/receipts?order=${order.id}`} data-tour="po-receive" className={primaryButtonClass}>{t('po_receive')}</Link>}
+                            {invoice !== null && (
+                                <Link href={invoiceEntryHref(order.id)} data-tour="po-invoice-enter" data-testid="po-invoice-enter-top" data-variant={invoice}
+                                    className={invoice === 'primary' ? primaryButtonClass : secondaryButtonClass}>+ {t('po_invoice_enter')}</Link>
+                            )}
+                        </span>
                     )}
                     <span className="flex flex-wrap gap-1"><OrderStatusBadge status={order.status} /><DocumentStatusBadge status={order.documentStatus} /><span data-tour="po-invoice-indicator" data-tour-key={order.invoiceIndicator}><InvoiceIndicatorBadge indicator={order.invoiceIndicator} /></span></span>
                 </div>
@@ -101,11 +110,15 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                 <p className="mt-1 text-sm text-gray-900" data-testid="po-delivery-term" data-tour="po-delivery-term">
                     {t('relations_terms_delivery')}: <span className="font-medium">{describeDeliveryTerm(order.deliveryTerm, t) ?? t('delivery_term_none')}</span>
                 </p>
-                {/* Feedback 22 november: waar ontvangen wordt, het laadadres en het afleveradres (leeg = de eigen loods / de leverancier levert). */}
-                <dl className="mt-1 grid grid-cols-1 gap-x-4 gap-y-1 text-sm text-gray-900 sm:grid-cols-3" data-testid="po-logistics" data-tour="po-logistics">
+                                <dl className="mt-1 grid grid-cols-1 gap-x-4 gap-y-1 text-sm text-gray-900 sm:grid-cols-3" data-testid="po-logistics" data-tour="po-logistics">
+                    {/* November 2026: twee plekken. Waar het vandaan komt (de leverancier levert, of het laadadres), en waar het binnenkomt; bij Direct
+                        naar klant de klant met het afleveradres. Een afleveradres bij een gewone locatie (van vroeger) blijft zichtbaar. */}
+                    <div><dt className="text-xs text-gray-600">{t('po_logistics_loading')}</dt><dd className="whitespace-pre-line">{order.loadingAddress ?? t('po_logistics_vendor_delivers')}</dd></div>
                     <div><dt className="text-xs text-gray-600">{t('po_logistics_location')}</dt><dd className="font-medium">{order.receiveLocationName ?? t('stock_location_own')}</dd></div>
-                    <div><dt className="text-xs text-gray-600">{t('po_logistics_loading')}</dt><dd className="whitespace-pre-line">{order.loadingAddress ?? t('po_logistics_loading_placeholder')}</dd></div>
-                    <div><dt className="text-xs text-gray-600">{t('po_logistics_delivery')}</dt><dd className="whitespace-pre-line">{order.deliveryAddress ?? t('po_logistics_delivery_placeholder')}</dd></div>
+                    {order.deliveryAddress && (
+                        <div data-testid="po-logistics-delivery"><dt className="text-xs text-gray-600">{t(order.receiveLocationKind === 'InTransit' ? 'po_logistics_delivery_customer' : 'po_logistics_delivery_earlier')}</dt>
+                            <dd className="whitespace-pre-line">{order.deliveryAddress}</dd></div>
+                    )}
                 </dl>
                 {/* Valuta-ronde: valuta en de vastgelegde koers (eenheden valuta per 1 euro), met bron en datum. */}
                 {order.currency && !isEuro(order.currency) && order.exchangeRate ? (
