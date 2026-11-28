@@ -11,5 +11,6 @@ namespace AgfAdmin.Services
         Task<ServiceResult<PalletDto>> ChangeLocationAsync(int palletId, ChangePalletLocationDto request, CancellationToken cancellationToken = default);
         Task<ServiceResult<PalletContentLineDto>> ChangeQualityStatusAsync(int palletId, int contentLineId, ChangeQualityStatusDto request, CancellationToken cancellationToken = default);
         Task<ServiceResult<IReadOnlyList<PalletAuditEventDto>>> GetAuditEventsAsync(int palletId, CancellationToken cancellationToken = default);
+        Task<IReadOnlyList<string>> GetRecentInspectorsAsync(CancellationToken cancellationToken = default);
     }
 }

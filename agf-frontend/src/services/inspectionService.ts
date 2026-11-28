@@ -12,7 +12,7 @@ import {
     isPalletDetailLine,
 } from '../types/inspection';
 
-// Keuring per inhoudsregel, uitsluitend via bestaande endpoints. Lezen: pallet, audit, aanvoer en beschikbaarheid.
+// Keuring per inhoudsregel. Lezen: pallet, audit, aanvoer, beschikbaarheid en de eerder ingevulde namen bij Wie beoordeelt.
 // Schrijven: alleen POST .../quality-status. Audit wordt nooit door de UI geschreven of gewijzigd.
 
 export interface CommitmentContext {
@@ -44,6 +44,15 @@ export async function getPalletDetail(palletId: number, signal?: AbortSignal): P
     const json = await getJson(`/pallets/${palletId}`, signal);
     if (!isPalletDetail(json)) {
         throw new ApiError('shape', 'Onverwacht antwoord bij de pallet.');
+    }
+    return json;
+}
+
+// Suggesties bij Wie beoordeelt: de namen van eerdere keuringen (laatste 90 dagen, uniek, meest gebruikt eerst, hoogstens tien).
+export async function getRecentInspectors(signal?: AbortSignal): Promise<string[]> {
+    const json = await getJson('/pallets/recent-inspectors', signal);
+    if (!Array.isArray(json) || !json.every((name) => typeof name === 'string')) {
+        throw new ApiError('shape', 'Onverwacht antwoord bij de eerdere beoordelaars.');
     }
     return json;
 }

@@ -18,7 +18,8 @@ export function LotColorBadge({ color }: { color: string | null | undefined }) {
 }
 
 // De kleur van een inkoop-partij kiezen uit de lijst van haar product(en); geldt voor de hele partij. Bij de keuring en op het partijdetail.
-// Zonder kleurenlijst zegt het veld waar die in te stellen is. Opslaan na een keuze (Enter of de knop), met historie op de server.
+// Zonder kleurenlijst zegt het veld waar die in te stellen is. Compact (de keuring, een regel per pallet) is er dan niets te kiezen: geen
+// veld en geen uitleg, alleen een al opgeslagen kleur als korte tekst. Opslaan na een keuze (Enter of de knop), met historie op de server.
 // Velden van dezelfde partij (meerdere keuringsregels) houden elkaar bij: een opgeslagen kleur wordt aan de andere velden doorgegeven.
 const savedListeners = new Set<(partijId: number, color: string | null) => void>();
 
@@ -85,6 +86,9 @@ function LotColorFieldInner({ partijId, partijNumber, onSaved, compact = false, 
     };
 
     if (allowed === null) return error ? <ErrorNotice error={error} /> : null;
+    if (compact && allowed.length === 0) {
+        return saved ? <span className="mt-1 block text-xs text-gray-700" data-testid="lot-color-text">{t('lot_color_text', { color: saved })}</span> : null;
+    }
     return (
         <div className={compact ? 'mt-1' : 'space-y-1'} data-testid="lot-color-field">
             <label htmlFor={id} className="text-xs font-medium text-gray-700">

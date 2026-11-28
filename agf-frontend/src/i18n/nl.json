@@ -504,6 +504,7 @@
   "lot_color_save": "Kleur opslaan",
   "lot_color_hint": "Geldt voor de hele partij, niet alleen voor deze pallet. Elke wijziging staat in de historie.",
   "lot_color_no_list": "Dit product heeft geen kleuren. Stel ze in bij Stamgegevens › Artikelen.",
+  "lot_color_text": "Kleur: {color}",
   "product_colors_title": "Kleuren van {product}",
   "product_colors_placeholder": "Bijvoorbeeld: groen, geel",
   "product_colors_hint": "Gescheiden door komma's, bijvoorbeeld 1, 2, 3, 4, 5, 6 voor ananas. Leeg = geen kleur voor dit product. Geldt voor alle artikelen van dit product.",

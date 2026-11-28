@@ -15,7 +15,7 @@ import {
 import { newRequestId } from '../../lib/requestId';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { lastInspection } from '../../lib/inspectionList';
-import { InspectionPallet, changeQualityStatus, historyFor } from '../../services/inspectionService';
+import { InspectionPallet, changeQualityStatus, getRecentInspectors, historyFor } from '../../services/inspectionService';
 import { QualityStatus } from '../../types/availability';
 import { ChangeQualityStatusRequest, PalletDetailLine } from '../../types/inspection';
 import QualityBadge from '../availability/QualityBadge';
@@ -28,7 +28,7 @@ import { WeightBadge } from '../shared/WeightBadge';
 import LineHistory from './LineHistory';
 import OrderNumberText from '../purchase/OrderNumberText';
 import TechnicalDetails from '../supply/TechnicalDetails';
-import { KNOWN_INSPECTORS, onRememberedInspectorChange, readRememberedInspector, rememberInspector } from './inspectorMemory';
+import { onRememberedInspectorChange, readRememberedInspector, rememberInspector } from './inspectorMemory';
 
 // Eén inhoudsregel met zijn eigen, losse kwaliteitsacties. Nooit voor de hele pallet en nooit in bulk.
 export default function InspectionLineRow({ context, line, readOnly, onSucceeded, onReload }: {
@@ -43,6 +43,8 @@ export default function InspectionLineRow({ context, line, readOnly, onSucceeded
     const [reason, setReason] = useState('');
     // Wie beoordeelt hoort bij deze keuring: voorgevuld met de laatste keuze op dit apparaat, altijd zichtbaar en aanpasbaar.
     const [inspector, setInspector] = useState('');
+    // Suggesties uit eerdere keuringen, opgehaald zodra het paneel opent; zonder antwoord gewoon geen suggesties (typen werkt altijd).
+    const [suggestions, setSuggestions] = useState<string[]>([]);
     // Bevroren actie: alleen bij een onbekende uitkomst wordt exact deze (zelfde requestId) bewust opnieuw verstuurd.
     const [pending, setPending] = useState<ChangeQualityStatusRequest | null>(null);
     const [submitting, setSubmitting] = useState(false);
@@ -60,6 +62,14 @@ export default function InspectionLineRow({ context, line, readOnly, onSucceeded
     const locked = submitting || unknown || conflict;
     const reasonRequired = action !== null && qualityReasonRequired(line.qualityStatus, action);
     const idPrefix = `line-${line.id}`;
+
+    const panelOpen = action !== null;
+    useEffect(() => {
+        if (!panelOpen) return;
+        const controller = new AbortController();
+        getRecentInspectors(controller.signal).then(setSuggestions).catch(() => { /* alleen een suggestie */ });
+        return () => controller.abort();
+    }, [panelOpen]);
 
     // De rondleiding (of een ander tabblad) zet een nieuwe keuze: een open paneel zonder eigen invoer volgt die.
     useEffect(() => onRememberedInspectorChange(() => { if (pending === null) setInspector(readRememberedInspector() ?? ''); }), [pending]);
@@ -227,7 +237,7 @@ export default function InspectionLineRow({ context, line, readOnly, onSucceeded
                                 aria-describedby={fieldErrors.inspectedBy ? `${idPrefix}-inspector-error` : `${idPrefix}-inspector-hint`}
                                 className={inputClass} />
                             <datalist id={`${idPrefix}-inspectors`}>
-                                {KNOWN_INSPECTORS.map((name) => <option key={name} value={name} />)}
+                                {suggestions.map((name) => <option key={name} value={name} />)}
                             </datalist>
                             <span id={`${idPrefix}-inspector-hint`} className="block text-xs text-gray-500">{t('inspection_inspector_hint')}</span>
                             <FieldError id={`${idPrefix}-inspector-error`} messages={fieldErrors.inspectedBy} />

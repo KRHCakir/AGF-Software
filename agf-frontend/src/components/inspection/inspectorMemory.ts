@@ -1,8 +1,7 @@
 // Wie beoordeelt: per keuring gekozen, want in de loods keurt niet altijd de ingelogde gebruiker (gedeelde tablet of pc). Dit apparaat
-// onthoudt de laatste keuze als voorstel; het veld toont die altijd zichtbaar en aanpasbaar, nooit stil op de achtergrond.
+// onthoudt de laatste keuze als voorstel; het veld toont die altijd zichtbaar en aanpasbaar, nooit stil op de achtergrond. De suggesties
+// komen uit eerdere keuringen (getRecentInspectors), niet uit een vaste lijst.
 export const INSPECTOR_STORAGE_KEY = 'agf_inspection_inspector';
-// Medewerkers die als suggestie verschijnen (typen met suggesties; een andere naam mag ook).
-export const KNOWN_INSPECTORS: readonly string[] = ['Jan', 'Steve'];
 const INSPECTOR_CHANGED_EVENT = 'agf-inspector-changed';
 
 export function readRememberedInspector(): string | null {

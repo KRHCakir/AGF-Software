@@ -221,4 +221,37 @@ public class PalletsControllerTests : IDisposable
         Assert.Equal(new[] { "PalletCreated", "ContentLineAdded" }, events.Select(e => e.EventType));
         Assert.IsType<NotFoundObjectResult>(await Run(c => c.GetAuditEvents(999_999)));
     }
+
+    [Fact]
+    public async Task GetRecentInspectors_Returns_The_Names_Of_Recent_Inspections_Unique_And_Most_Used_First()
+    {
+        var (pallet, line) = await PalletWithLineAsync();
+        Assert.Empty(Assert.IsAssignableFrom<IReadOnlyList<string>>(Assert.IsType<OkObjectResult>(await Run(c => c.GetRecentInspectors())).Value));
+
+        var now = DateTime.UtcNow;
+        await using (var db = _factory.CreateContext())
+        {
+            PalletAuditEvent Inspection(string inspectedBy, int daysAgo, string type = PalletService.QualityStatusChangedEvent) => new()
+            {
+                PalletId = pallet.Id, PalletContentLineId = line.Id, EventType = type, OldValue = "{}", NewValue = "{}",
+                ActorReference = "Ingelogde gebruiker", InspectedBy = inspectedBy, OccurredAt = now.AddDays(-daysAgo),
+            };
+            db.PalletAuditEvents.AddRange(
+                Inspection("Steve", 2), Inspection("steve", 3), Inspection(" Steve ", 4),
+                Inspection("Fatima", 1), Inspection("Fatima", 5),
+                Inspection("Jan", 1),
+                Inspection("Oud", 91), Inspection("Oud", 120),
+                Inspection(null, 1), Inspection("Locatie", 1, PalletService.LocationChangedEvent));
+            for (var i = 0; i < 12; i++) db.PalletAuditEvents.Add(Inspection($"Medewerker {i:00}", 10 + i));
+            await db.SaveChangesAsync();
+        }
+
+        var names = Assert.IsAssignableFrom<IReadOnlyList<string>>(Assert.IsType<OkObjectResult>(await Run(c => c.GetRecentInspectors())).Value);
+        Assert.Equal(PalletService.RecentInspectorLimit, names.Count);
+        // Steve drie keer (hoofdletters en spaties tellen niet), Fatima twee keer, dan Jan en de rest op laatst gebruikt.
+        Assert.Equal(new[] { "Steve", "Fatima", "Jan", "Medewerker 00", "Medewerker 01" }, names.Take(5));
+        Assert.DoesNotContain("Oud", names);
+        Assert.DoesNotContain("Locatie", names);
+        Assert.DoesNotContain("Ingelogde gebruiker", names);
+    }
 }

@@ -8,6 +8,11 @@ import { LotColorBadge, LotColorField } from './LotColor';
 
 // Feedback 22 november: kleur van de partij, gekozen uit de lijst van het product (Stamgegevens). Geldt voor de hele partij.
 
+const partij = (color: string | null) => ({
+    id: 7, number: 'I-2611005', kind: 'Purchase', status: 'Open', linked: true, vendors: [], products: [], purchasedQuantity: 0, onHandQuantity: 0, soldQuantity: 0,
+    orders: [], receipts: [], history: [], color, allowedColors: [],
+});
+
 let mounted: Mounted;
 let calls: { method: string; url: string; body: string | null }[];
 let answer: (method: string, url: string) => Response;
@@ -44,6 +49,40 @@ describe('lot color', () => {
         await mounted.render(<><LotColorField partijId={7} initial={{ color: null, allowedColors: [] }} /><LotColorBadge color={null} /><LotColorBadge color="Geel" /></>);
         assert.ok(mounted.hasText('lot_color_no_list'));
         assert.equal(mounted.container.querySelectorAll('[data-testid="lot-color"]').length, 1);
+    });
+
+    test('in the inspection (compact) a product without colors shows nothing: no label, no explanation', async () => {
+        // Twee partijen van hetzelfde product zonder kleuren; de tweede heeft al een kleur (van vroeger), dat bewijst dat het laden klaar is.
+        answer = (_method, url) => json(200, partij(url.endsWith('/8') ? 'Geel' : null));
+        await mounted.render(<><LotColorField partijId={7} partijNumber="I-2611005" compact /><LotColorField partijId={8} partijNumber="I-2611006" compact /></>);
+        await mounted.waitFor(() => one('[data-testid="lot-color-text"]'), 'loaded');
+        assert.equal(mounted.container.querySelectorAll('[data-testid="lot-color-text"]').length, 1);
+        assert.equal(mounted.container.textContent, 'lot_color_text');
+        assert.equal(one('[data-testid="lot-color-field"]'), null);
+        assert.ok(!mounted.hasText('lot_color_no_list'));
+        assert.ok(!mounted.hasText('lot_color_of'));
+        assert.ok(!mounted.hasText('lot_color_hint'));
+    });
+
+    test('in the inspection (compact) a saved color without a list shows only that color as short text', async () => {
+        await mounted.render(<LotColorField partijId={7} partijNumber="I-2611005" compact initial={{ color: 'Geel', allowedColors: [] }} />);
+        assert.equal(one('[data-testid="lot-color-text"]')!.textContent, 'lot_color_text');
+        assert.equal(one('select'), null);
+        assert.ok(!mounted.hasText('lot_color_no_list'));
+        assert.ok(!mounted.hasText('lot_color_hint'));
+    });
+
+    test('in the inspection (compact) a product with colors still offers the choice', async () => {
+        await mounted.render(<LotColorField partijId={7} partijNumber="I-2611005" compact initial={{ color: null, allowedColors: ['1', '2'] }} />);
+        assert.ok(one('[data-tour="lot-color"]'));
+        assert.ok(mounted.hasText('lot_color_of'));
+    });
+
+    test('on the lot page (not compact) the explanation with Stamgegevens stays, also with a saved color', async () => {
+        await mounted.render(<><LotColorField partijId={7} initial={{ color: null, allowedColors: [] }} /><LotColorField partijId={8} initial={{ color: 'Geel', allowedColors: [] }} /></>);
+        assert.equal(mounted.container.querySelectorAll('[data-testid="lot-color-field"]').length, 2);
+        assert.equal(Array.from(mounted.container.querySelectorAll('p')).filter((p) => p.textContent === 'lot_color_no_list').length, 2);
+        assert.equal(one('[data-testid="lot-color-text"]'), null);
     });
 
     test('the product color list is typed with commas and saved trimmed', async () => {
