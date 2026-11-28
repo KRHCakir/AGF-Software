@@ -3628,5 +3628,6 @@
   "po_logistics_location_add": "+ Locatie toevoegen",
   "stock_location_default_title": "Standaard ontvangstlocatie",
   "stock_location_default_hint": "Voor een nieuwe inkooporder, als er meer dan één eigen loods is.",
-  "stock_location_default_saved": "Standaard ontvangstlocatie opgeslagen."
+  "stock_location_default_saved": "Standaard ontvangstlocatie opgeslagen.",
+  "po_logistics_default_failed": "De standaard ontvangstlocatie kon niet geladen worden. Kies zelf de juiste loods, of probeer het opnieuw."
 }

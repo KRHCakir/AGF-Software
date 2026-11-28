@@ -12,7 +12,7 @@ const ADD = '__add';
 // Afwijkend? (de enige tabstop), zodat leverancier kiezen en door naar de regels snel blijft. Afwijkend? toont op dezelfde plek de lijst met
 // de focus erin; Escape of Terug naar standaard gaat terug. Een order met een andere locatie toont de lijst meteen. Met meer dan één eigen
 // loods staat de lijst altijd open (de standaard voorgekozen door het formulier). Vergrendeld: alleen tekst.
-export default function ReceiveLocationField({ value, onChange, locations, locked, errors, ownWarehouseAddress = null, locationsFailed = false, onRetryLocations, onAddLocation }: {
+export default function ReceiveLocationField({ value, onChange, locations, locked, errors, ownWarehouseAddress = null, locationsFailed = false, onRetryLocations, onAddLocation, defaultFailed = false }: {
     value: string;
     onChange: (id: string) => void;
     locations: readonly StockLocation[];
@@ -23,6 +23,8 @@ export default function ReceiveLocationField({ value, onChange, locations, locke
     onRetryLocations?: () => void;
     // Opent Instellingen › Voorraadlocaties in een zijpaneel (zonder de order kwijt te raken).
     onAddLocation?: () => void;
+    // De standaard ontvangstlocatie kon niet geladen worden (alleen van belang bij meer dan één eigen loods, voor een nieuwe order).
+    defaultFailed?: boolean;
 }) {
     const { t } = useTranslation();
     const [open, setOpen] = useState(false);
@@ -89,6 +91,12 @@ export default function ReceiveLocationField({ value, onChange, locations, locke
             </select>
             <FieldError id="logistics.receiveLocationId" messages={errors('logistics.receiveLocationId')} />
             <span className="block text-xs text-gray-500">{t(inTransit ? 'po_logistics_location_in_transit' : 'po_logistics_location_hint')}</span>
+            {several && defaultFailed && (
+                <span role="alert" className="block text-xs text-amber-900" data-testid="receive-default-failed">
+                    {t('po_logistics_default_failed')}{' '}
+                    {onRetryLocations && <button type="button" className="underline underline-offset-2" onClick={onRetryLocations}>{t('currency_list_retry')}</button>}
+                </span>
+            )}
             {!several && (
                 <button type="button" className="mt-1 text-xs text-blue-800 underline underline-offset-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     data-testid="receive-location-back" onClick={backToDefault}>{t('po_logistics_location_back')}</button>

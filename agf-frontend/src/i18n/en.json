@@ -3628,5 +3628,6 @@
   "po_logistics_location_add": "+ Add location",
   "stock_location_default_title": "Default receiving location",
   "stock_location_default_hint": "For a new purchase order, when there is more than one own warehouse.",
-  "stock_location_default_saved": "Default receiving location saved."
+  "stock_location_default_saved": "Default receiving location saved.",
+  "po_logistics_default_failed": "The default receiving location could not be loaded. Choose the right warehouse yourself, or try again."
 }

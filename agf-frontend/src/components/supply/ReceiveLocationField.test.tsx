@@ -19,13 +19,13 @@ let mounted: Mounted;
 let changes: string[];
 let added: number;
 
-function Harness({ initial, locations, locked = false }: { initial: string; locations: StockLocation[]; locked?: boolean }) {
+function Harness({ initial, locations, locked = false, defaultFailed = false }: { initial: string; locations: StockLocation[]; locked?: boolean; defaultFailed?: boolean }) {
     const [value, setValue] = useState(initial);
     return (
         <form>
             <input id="vendor" />
             <ReceiveLocationField value={value} onChange={(id) => { changes.push(id); setValue(id); }} locations={locations} locked={locked} errors={() => undefined}
-                ownWarehouseAddress={'DEMO-loods\nVeilingweg 5'} onAddLocation={() => { added++; }} />
+                ownWarehouseAddress={'DEMO-loods\nVeilingweg 5'} onAddLocation={() => { added++; }} defaultFailed={defaultFailed} onRetryLocations={() => undefined} />
             <input id="next" />
         </form>
     );
@@ -83,6 +83,12 @@ describe('receive location', () => {
         await mounted.render(<Harness initial={defaultReceiveLocation(locations, 2)} locations={locations} />);
         assert.equal(select()!.value, '2');
         assert.equal(mounted.container.querySelector('[data-testid="receive-location-back"]'), null);
+    });
+
+    test('with more than one own warehouse a default that could not be loaded is said, never silently Eigen loods', async () => {
+        await mounted.render(<Harness initial="" locations={[onderweg, hall]} defaultFailed />);
+        assert.ok(mounted.container.querySelector('[data-testid="receive-default-failed"]'));
+        assert.ok(mounted.hasText('po_logistics_default_failed'));
     });
 
     test('+ Locatie toevoegen opens the settings and keeps the chosen location', async () => {

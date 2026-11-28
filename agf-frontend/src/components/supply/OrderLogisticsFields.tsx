@@ -13,7 +13,7 @@ import ReceiveLocationField from './ReceiveLocationField';
 // Feedback 22 november: waar de inkooporder ontvangen wordt (de eigen loods, of een cross-dock, externe opslag, de leverancier of Onderweg /
 // direct naar klant), het laadadres (leeg als de leverancier levert; "Wij halen op" vult het adres van de leverancier) en het afleveradres
 // (leeg = de eigen loods; bij Onderweg het adres van de klant, te kiezen). Alles blijft gewone tekst die de gebruiker kan aanpassen.
-export default function OrderLogisticsFields({ value, onChange, locations, vendorId, customers, locked, errors, locationsFailed = false, onRetryLocations, ownWarehouseAddress = null, onAddLocation }: {
+export default function OrderLogisticsFields({ value, onChange, locations, vendorId, customers, locked, errors, locationsFailed = false, onRetryLocations, ownWarehouseAddress = null, onAddLocation, defaultFailed = false }: {
     value: OrderLogisticsDraft;
     onChange: (next: OrderLogisticsDraft) => void;
     locations: readonly StockLocation[];
@@ -27,6 +27,7 @@ export default function OrderLogisticsFields({ value, onChange, locations, vendo
     // November 2026: het adres van de eigen loods (onder "Eigen loods") en Instellingen › Voorraadlocaties in een zijpaneel.
     ownWarehouseAddress?: string | null;
     onAddLocation?: () => void;
+    defaultFailed?: boolean;
 }) {
     const { t } = useTranslation();
     const [customerId, setCustomerId] = useState('');
@@ -130,7 +131,7 @@ export default function OrderLogisticsFields({ value, onChange, locations, vendo
             <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-gray-600">{t('po_logistics_title')}</legend>
             <ReceiveLocationField value={value.receiveLocationId} onChange={(id) => onChange({ ...latest.current, receiveLocationId: id })} locations={locations}
                 locked={locked} errors={errors} ownWarehouseAddress={ownWarehouseAddress} locationsFailed={locationsFailed} onRetryLocations={onRetryLocations}
-                onAddLocation={onAddLocation} />
+                onAddLocation={onAddLocation} defaultFailed={defaultFailed} />
             <div>
                 <label htmlFor="logistics.loadingAddress-input" className="text-xs font-medium text-gray-700">{t('po_logistics_loading')}</label>
                 <label className="mt-1 flex items-center gap-2 text-xs text-gray-800">

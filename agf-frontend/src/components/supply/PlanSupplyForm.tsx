@@ -181,12 +181,16 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
         listStockLocations(controller.signal).then(setStockLocations)
             .catch((caught: unknown) => { if (toApiError(caught).kind !== 'aborted') setLocationsFailed(true); });
         // De standaard ontvangstlocatie en het loodsadres: zonder antwoord blijft Eigen loods de standaard, zonder adres.
-        getReceiveDefaults(controller.signal).then(setReceiveDefaults).catch(() => undefined);
+        // Review: kan de standaard niet geladen worden, dan zegt het veld dat (bij meer dan één eigen loods), in plaats van stil Eigen loods.
+        setDefaultsFailed(false);
+        getReceiveDefaults(controller.signal).then(setReceiveDefaults)
+            .catch((caught: unknown) => { if (toApiError(caught).kind !== 'aborted') setDefaultsFailed(true); });
         return () => controller.abort();
     }, [route, locationsAttempt]);
     // November 2026: bij meer dan één eigen loods krijgt een nieuwe order de standaard ontvangstlocatie, tot de gebruiker zelf kiest.
     const [receiveDefaults, setReceiveDefaults] = useState<ReceiveDefaults | null>(null);
     const [locationPanel, setLocationPanel] = useState(false);
+    const [defaultsFailed, setDefaultsFailed] = useState(false);
     const receiveTouched = useRef(editing !== null);
     const defaultLocation = defaultReceiveLocation(stockLocations, receiveDefaults?.defaultReceiveLocationId ?? null);
     useEffect(() => {
@@ -739,7 +743,8 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
                     onChange={(next) => { if (locked) return; if (next.receiveLocationId !== logistics.receiveLocationId) receiveTouched.current = true; setLogistics(next); edited(); }}
                     vendorId={header.vendorId === '' ? null : Number(header.vendorId)} customers={reference.customers} locked={locked} errors={e}
                     locationsFailed={locationsFailed} onRetryLocations={() => setLocationsAttempt((n) => n + 1)}
-                    ownWarehouseAddress={receiveDefaults?.ownWarehouseAddress ?? null} onAddLocation={() => setLocationPanel(true)} />
+                    ownWarehouseAddress={receiveDefaults?.ownWarehouseAddress ?? null} onAddLocation={() => setLocationPanel(true)}
+                    defaultFailed={defaultsFailed && editing === null} />
             )}
             {/* + Locatie toevoegen: Instellingen › Voorraadlocaties in een zijpaneel; bij sluiten komt de lijst opnieuw binnen. */}
             {locationPanel && (
