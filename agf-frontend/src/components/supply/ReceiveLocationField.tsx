@@ -8,6 +8,10 @@ import FieldError, { fieldProps, inputClass } from './FieldError';
 
 const ADD = '__add';
 
+// In de lijst eerst de eigen loodsen, dan de andere locaties met hun soort, en Direct naar klant (onderweg) als laatste.
+const KIND_ORDER: Record<StockLocation['kind'], number> = { OwnWarehouse: 0, Crossdock: 1, ExternalStorage: 2, Supplier: 3, InTransit: 4 };
+const orderedChoices = (choices: StockLocation[]) => [...choices].sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.name.localeCompare(b.name));
+
 // Ontvangstlocatie van een inkooporder (november 2026). Met één eigen loods is Eigen loods de standaard: een rustige regel met het adres en
 // Afwijkend? (de enige tabstop), zodat leverancier kiezen en door naar de regels snel blijft. Afwijkend? toont op dezelfde plek de lijst met
 // de focus erin; Escape of Terug naar standaard gaat terug. Een order met een andere locatie toont de lijst meteen. Met meer dan één eigen
@@ -34,6 +38,7 @@ export default function ReceiveLocationField({ value, onChange, locations, locke
     const several = hasSeveralOwnWarehouses(locations);
     const inTransit = isInTransit(locations, value);
     const showList = !locked && (several || open || value !== '');
+    const chosenAddress = value === '' ? ownWarehouseAddress : locations.find((location) => String(location.id) === value)?.address ?? null;
 
     useEffect(() => {
         if (focus.current === 'select' && select.current) select.current.focus();
@@ -59,14 +64,13 @@ export default function ReceiveLocationField({ value, onChange, locations, locke
     );
 
     if (!showList) {
-        const own = value === '';
         return (
             <div data-testid="receive-location-text">
                 <p className="text-sm text-gray-900">
                     <span className="text-xs font-medium text-gray-700">{t('po_logistics_location')}:</span>{' '}
                     <span data-testid="receive-location-name">{receiveLocationName(locations, value, t('stock_location_own'))}</span>
                 </p>
-                {own && ownWarehouseAddress && <span className="block whitespace-pre-line text-xs text-gray-500" data-testid="receive-location-address">{ownWarehouseAddress}</span>}
+                {!inTransit && chosenAddress && <span className="block whitespace-pre-line text-xs text-gray-500" data-testid="receive-location-address">{chosenAddress}</span>}
                 {!locked && (
                     <button ref={other} type="button" className="mt-1 min-h-8 text-xs text-blue-800 underline underline-offset-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         data-tour="supply-receive-location" onClick={openList}>✎ {t('po_logistics_location_other')}</button>
@@ -82,7 +86,7 @@ export default function ReceiveLocationField({ value, onChange, locations, locke
             <select ref={select} {...fieldProps('logistics.receiveLocationId', errors('logistics.receiveLocationId'))} value={value} data-tour="supply-receive-location"
                 onChange={choose} onKeyDown={keyDown} className={inputClass}>
                 <option value="">{t('stock_location_own')}</option>
-                {locationChoices(locations, value).map((location) => {
+                {orderedChoices(locationChoices(locations, value)).map((location) => {
                     // Geen dubbele tekst als de naam al de soort is (de vaste locatie "Onderweg / direct naar klant").
                     const kind = t(`stock_location_kind_${location.kind}`);
                     return <option key={location.id} value={String(location.id)}>{location.name === kind ? location.name : `${location.name} · ${kind}`}</option>;
@@ -90,6 +94,8 @@ export default function ReceiveLocationField({ value, onChange, locations, locke
                 {onAddLocation && <option value={ADD}>{t('po_logistics_location_add')}</option>}
             </select>
             <FieldError id="logistics.receiveLocationId" messages={errors('logistics.receiveLocationId')} />
+            {/* Het adres van de gekozen locatie is de bestemming (geen apart afleveradres); bij Direct naar klant volgt het adres van de klant. */}
+            {!inTransit && chosenAddress && <span className="block whitespace-pre-line text-xs text-gray-500" data-testid="receive-location-address">{chosenAddress}</span>}
             <span className="block text-xs text-gray-500">{t(inTransit ? 'po_logistics_location_in_transit' : 'po_logistics_location_hint')}</span>
             {several && defaultFailed && (
                 <span role="alert" className="block text-xs text-amber-900" data-testid="receive-default-failed">

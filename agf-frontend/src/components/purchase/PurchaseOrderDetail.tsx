@@ -101,11 +101,15 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                 <p className="mt-1 text-sm text-gray-900" data-testid="po-delivery-term" data-tour="po-delivery-term">
                     {t('relations_terms_delivery')}: <span className="font-medium">{describeDeliveryTerm(order.deliveryTerm, t) ?? t('delivery_term_none')}</span>
                 </p>
-                {/* Feedback 22 november: waar ontvangen wordt, het laadadres en het afleveradres (leeg = de eigen loods / de leverancier levert). */}
-                <dl className="mt-1 grid grid-cols-1 gap-x-4 gap-y-1 text-sm text-gray-900 sm:grid-cols-3" data-testid="po-logistics" data-tour="po-logistics">
+                                <dl className="mt-1 grid grid-cols-1 gap-x-4 gap-y-1 text-sm text-gray-900 sm:grid-cols-3" data-testid="po-logistics" data-tour="po-logistics">
+                    {/* November 2026: twee plekken. Waar het vandaan komt (de leverancier levert, of het laadadres), en waar het binnenkomt; bij Direct
+                        naar klant de klant met het afleveradres. Een afleveradres bij een gewone locatie (van vroeger) blijft zichtbaar. */}
+                    <div><dt className="text-xs text-gray-600">{t('po_logistics_loading')}</dt><dd className="whitespace-pre-line">{order.loadingAddress ?? t('po_logistics_vendor_delivers')}</dd></div>
                     <div><dt className="text-xs text-gray-600">{t('po_logistics_location')}</dt><dd className="font-medium">{order.receiveLocationName ?? t('stock_location_own')}</dd></div>
-                    <div><dt className="text-xs text-gray-600">{t('po_logistics_loading')}</dt><dd className="whitespace-pre-line">{order.loadingAddress ?? t('po_logistics_loading_placeholder')}</dd></div>
-                    <div><dt className="text-xs text-gray-600">{t('po_logistics_delivery')}</dt><dd className="whitespace-pre-line">{order.deliveryAddress ?? t('po_logistics_delivery_placeholder')}</dd></div>
+                    {order.deliveryAddress && (
+                        <div data-testid="po-logistics-delivery"><dt className="text-xs text-gray-600">{t(order.receiveLocationKind === 'InTransit' ? 'po_logistics_delivery_customer' : 'po_logistics_delivery_earlier')}</dt>
+                            <dd className="whitespace-pre-line">{order.deliveryAddress}</dd></div>
+                    )}
                 </dl>
                 {/* Valuta-ronde: valuta en de vastgelegde koers (eenheden valuta per 1 euro), met bron en datum. */}
                 {order.currency && !isEuro(order.currency) && order.exchangeRate ? (

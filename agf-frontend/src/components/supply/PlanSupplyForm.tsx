@@ -25,7 +25,7 @@ import { formatDecimalInput } from '../../lib/decimal';
 import { type OrderEdit, type SplitRemainder, isSplit, lineLimits, openQuantityOf, orderEditOf, updateLinePayload } from '../../lib/purchaseOrderEdit';
 import SplitLineDialog, { type SplitQuestion } from './SplitLineDialog';
 import OrderLogisticsFields from './OrderLogisticsFields';
-import { type OrderLogisticsDraft, defaultReceiveLocation, emptyLogistics, logisticsOf, logisticsPayload } from '../../lib/orderLogistics';
+import { type OrderLogisticsDraft, defaultReceiveLocation, emptyLogistics, logisticsOf, logisticsPayload, suggestedDeliveryCustomer } from '../../lib/orderLogistics';
 import { getReceiveDefaults, listStockLocations } from '../../services/stockLocationService';
 import StockLocationsSetting from '../settings/StockLocationsSetting';
 import SidePanel from '../shared/SidePanel';
@@ -744,7 +744,7 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
                     vendorId={header.vendorId === '' ? null : Number(header.vendorId)} customers={reference.customers} locked={locked} errors={e}
                     locationsFailed={locationsFailed} onRetryLocations={() => setLocationsAttempt((n) => n + 1)}
                     ownWarehouseAddress={receiveDefaults?.ownWarehouseAddress ?? null} onAddLocation={() => setLocationPanel(true)}
-                    defaultFailed={defaultsFailed && editing === null} />
+                    defaultFailed={defaultsFailed && editing === null} suggestedCustomerId={suggestedDeliveryCustomer(editing?.order.salesOrders)} />
             )}
             {/* + Locatie toevoegen: Instellingen › Voorraadlocaties in een zijpaneel; bij sluiten komt de lijst opnieuw binnen. */}
             {locationPanel && (

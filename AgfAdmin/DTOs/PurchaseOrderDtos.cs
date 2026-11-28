@@ -75,6 +75,8 @@ namespace AgfAdmin.DTOs
     public sealed class PurchaseOrderSalesLinkDto
     {
         public int SalesOrderId { get; set; }
+        // November 2026: de klant (id) van de verkooporder, om bij Direct naar klant die klant voor te stellen.
+        public int? CustomerId { get; set; }
         public string CustomerName { get; set; }
         public string Status { get; set; }
         public string Unit { get; set; }
