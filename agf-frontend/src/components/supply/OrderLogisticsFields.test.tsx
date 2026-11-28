@@ -3,10 +3,14 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { act, useState } from 'react';
 import { Mounted, click, json, setSelectValue, stubFetch } from '../../test/reactHarness.ts';
-import { type OrderLogisticsDraft, emptyLogistics, logisticsPayload, suggestedDeliveryCustomer } from '../../lib/orderLogistics.ts';
+import { type OrderLogisticsDraft, emptyLogistics, logisticsPayload } from '../../lib/orderLogistics.ts';
 import type { CustomerOption } from '../../types/referenceData';
 import type { StockLocation } from '../../types/stockLocation';
 import OrderLogisticsFields from './OrderLogisticsFields';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import en from '../../i18n/en.json';
+import nl from '../../i18n/nl.json';
 
 // Blok Logistiek op de inkooporder (november 2026): twee plekken. Waar het vandaan komt (standaard levert de leverancier; Wij halen op toont
 // het laadadres) en waar het binnenkomt (Eigen loods als tekst; een locatie met haar adres; Direct naar klant met het afleveradres van de
@@ -21,14 +25,14 @@ const customers = [{ id: 8, name: 'DEMO Klant Athene', searchCode: 'ATH', isActi
 let mounted: Mounted;
 let current: OrderLogisticsDraft;
 
-function Harness({ initial, locations = [direct, venlo], locked = false, suggested = null }: { initial: OrderLogisticsDraft; locations?: StockLocation[]; locked?: boolean; suggested?: number | null }) {
+function Harness({ initial, locations = [direct, venlo], locked = false }: { initial: OrderLogisticsDraft; locations?: StockLocation[]; locked?: boolean }) {
     const [value, setValue] = useState(initial);
     current = value;
     return (
         <form>
             <input id="before" />
             <OrderLogisticsFields value={value} onChange={(next) => { current = next; setValue(next); }} locations={locations} vendorId={3} customers={customers} locked={locked}
-                errors={() => undefined} ownWarehouseAddress="DEMO-loods, Veilingweg 5" suggestedCustomerId={suggested} />
+                errors={() => undefined} ownWarehouseAddress="DEMO-loods, Veilingweg 5" />
             <input id="after" />
         </form>
     );
@@ -92,15 +96,6 @@ describe('purchase order logistics', () => {
         assert.deepEqual(logisticsPayload(current), { receiveLocationId: 3, loadingAddress: null, deliveryAddress: null });
     });
 
-    test('choosing Direct naar klant proposes the one customer of the linked sales order', async () => {
-        await mounted.render(<Harness initial={{ ...emptyLogistics(), receiveLocationId: '3' }} suggested={8} />);
-        await choose('1');
-        await mounted.waitFor(() => (current.deliveryAddress.startsWith('DEMO Klant Athene') ? true : null), 'customer address');
-        assert.equal(suggestedDeliveryCustomer([{ customerId: 8 }, { customerId: 8 }]), 8);
-        assert.equal(suggestedDeliveryCustomer([{ customerId: 8 }, { customerId: 9 }]), null);
-        assert.equal(suggestedDeliveryCustomer(undefined), null);
-    });
-
     test('an earlier delivery address on Eigen loods is never dropped silently: shown with Leegmaken', async () => {
         await mounted.render(<Harness initial={{ ...emptyLogistics(), deliveryAddress: 'Oud adres\nStraat 1' }} />);
         assert.ok(mounted.hasText('po_logistics_delivery_earlier'));
@@ -108,6 +103,12 @@ describe('purchase order logistics', () => {
         await click(q('[data-testid="logistics-delivery-clear"]')!);
         assert.equal(current.deliveryAddress, '');
         assert.equal(q('[data-testid="logistics-delivery-earlier"]'), null);
+    });
+
+    test('the VAT choice of an order line is readable: the empty choice is short ("Artikel") and the select is wide enough', () => {
+        assert.deepEqual([nl.po_line_vat_none, en.po_line_vat_none], ['Artikel', 'Article']);
+        const source = readFileSync(join(process.cwd(), 'src/components/supply/PurchaseOrderLines.tsx'), 'utf8');
+        assert.match(source, /vatPercentage`, errors\([\s\S]*?w-24 text-right/);
     });
 
     test('a locked order shows only text: no list, no Afwijkend?, no Leegmaken', async () => {

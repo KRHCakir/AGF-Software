@@ -371,8 +371,6 @@ export interface PurchaseLineTotalsDto {
 
 export interface PurchaseOrderSalesLink {
     salesOrderId: number;
-    // November 2026 (ontbreekt bij een oudere server): de klant van de verkooporder.
-    customerId?: number | null;
     customerName: string | null;
     status: string;
     unit: string | null;

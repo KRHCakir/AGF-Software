@@ -45,13 +45,6 @@ export function defaultReceiveLocation(locations: readonly StockLocation[], defa
     return locations.some((location) => location.id === defaultId && location.isActive && location.kind === 'OwnWarehouse') ? String(defaultId) : '';
 }
 
-// November 2026: de klant om voor te stellen bij Direct naar klant: alleen als de verkooporders die van deze inkooporder verkopen precies
-// één klant hebben (anders geen voorstel).
-export function suggestedDeliveryCustomer(links: readonly { customerId?: number | null }[] | undefined): number | null {
-    const ids = new Set((links ?? []).map((link) => link.customerId).filter((id): id is number => typeof id === 'number'));
-    return ids.size === 1 ? [...ids][0] : null;
-}
-
 // De naam van de gekozen locatie voor de tekstweergave (leeg = Eigen loods; een onbekende id als nummer).
 export function receiveLocationName(locations: readonly StockLocation[], id: string, own: string): string {
     if (id === '') return own;

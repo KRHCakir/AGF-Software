@@ -1877,7 +1877,7 @@
   "po_line_lines_without_price": "{count} regel(s) zonder prijs",
   "po_line_col_discount": "Korting %",
   "po_line_col_vat": "Btw",
-  "po_line_vat_none": "– (van artikel)",
+  "po_line_vat_none": "Artikel",
   "po_line_discount_hint": "leeg = geen korting",
   "order_amounts_net": "Totaal excl. btw",
   "order_amounts_vat_rate": "Btw {rate}% over {net}",
@@ -3634,5 +3634,6 @@
   "po_logistics_delivery_customer": "Afleveradres klant",
   "po_logistics_delivery_customer_placeholder": "Naam en adres van de klant",
   "po_logistics_delivery_earlier": "Afleveradres (eerder ingevuld)",
-  "po_logistics_delivery_clear": "Leegmaken"
+  "po_logistics_delivery_clear": "Leegmaken",
+  "chain_invoice_action": "Factuur invoeren"
 }

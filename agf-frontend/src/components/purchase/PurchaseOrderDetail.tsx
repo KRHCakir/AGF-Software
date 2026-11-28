@@ -12,7 +12,8 @@ import type { PurchaseOrderDetail as Order, PurchaseOrderHistoryEvent } from '..
 import { getPurchaseOrder } from '../../services/purchaseOrderService';
 import PartijLinkPanel from '../partij/PartijLinkPanel';
 import ChainStrip from '../shared/ChainStrip';
-import { primaryButtonClass } from '../supply/SuccessPanel';
+import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
+import { canReceive, invoiceButton, invoiceEntryHref } from '../../lib/purchaseOrderNextStep';
 import { DocumentStatusBadge, InvoiceIndicatorBadge, OrderStatusBadge, BillingStatusBadge } from './PurchaseOrderBadges';
 import PurchaseOrderDocument, { PurchaseOrderChanges } from './PurchaseOrderDocument';
 import DeviationsSection from './DeviationsSection';
@@ -40,8 +41,10 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
     invoices?: React.ReactNode;
 }) {
     const { t, locale } = useTranslation();
-    // Volgende stap: ontvangen, zolang er van een inkooporder voor het eigen magazijn nog iets openstaat.
-    const receivable = order.route === 'Warehouse' && order.status !== 'Cancelled' && order.storedStatus !== 'Cancelled' && order.lines.some((line) => line.receivedQuantity < line.expectedQuantity);
+    // Volgende stap: ontvangen, zolang er van een inkooporder voor het eigen magazijn nog iets openstaat; daarnaast Factuur invoeren, die de
+    // hoofdknop wordt zodra alles ontvangen is (november 2026).
+    const receivable = canReceive(order);
+    const invoice = invoiceButton(order);
     const label = (keys: Readonly<Record<string, string>>, value: string | null) => { const key = labelKey(keys, value); return key ? t(key) : (value ?? '–'); };
     const qty = (value: number) => formatQuantity(value, locale);
     const labels = usePurchaseLineLabels();
@@ -59,8 +62,14 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                     <h2 id="po-detail-title" data-tour="po-detail-number" className="min-w-0 text-2xl font-bold text-gray-900">
                         <OrderNumberText orderNumber={order.orderNumber} supplierReference={order.supplierReference} stacked />
                     </h2>
-                    {receivable && (
-                        <Link href={`/receipts?order=${order.id}`} data-tour="po-receive" className={`${primaryButtonClass} ml-auto`}>{t('po_receive')}</Link>
+                    {(receivable || invoice !== null) && (
+                        <span className="ml-auto flex flex-wrap gap-2">
+                            {receivable && <Link href={`/receipts?order=${order.id}`} data-tour="po-receive" className={primaryButtonClass}>{t('po_receive')}</Link>}
+                            {invoice !== null && (
+                                <Link href={invoiceEntryHref(order.id)} data-tour="po-invoice-enter" data-testid="po-invoice-enter-top" data-variant={invoice}
+                                    className={invoice === 'primary' ? primaryButtonClass : secondaryButtonClass}>+ {t('po_invoice_enter')}</Link>
+                            )}
+                        </span>
                     )}
                     <span className="flex flex-wrap gap-1"><OrderStatusBadge status={order.status} /><DocumentStatusBadge status={order.documentStatus} /><span data-tour="po-invoice-indicator" data-tour-key={order.invoiceIndicator}><InvoiceIndicatorBadge indicator={order.invoiceIndicator} /></span></span>
                 </div>

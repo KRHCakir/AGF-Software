@@ -42,6 +42,8 @@ describe('purchase order document status', () => {
     test('an open order offers Edit and Make definitive; the question comes first on the page and only yes sends', async () => {
         await mounted.render(<PurchaseOrderDocument order={order()} onChanged={(o) => changed.push(o)} />);
         assert.equal($('[data-tour="po-edit"]')!.getAttribute('href'), '/purchase-orders/edit?id=5');
+        // November 2026: Definitief maken heeft een slot en staat apart van Aanpassen.
+        assert.ok($('[data-tour="po-finalize"] [data-testid="po-finalize-lock"]'));
         await act(async () => { $('[data-tour="po-finalize"]')!.click(); });
         assert.ok($('[data-testid="po-finalize-question"]')!.textContent!.includes('po_finalize_confirm'));
         assert.equal(posted.length, 0, 'the question comes first');

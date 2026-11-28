@@ -280,12 +280,12 @@ namespace AgfAdmin.Services
             var salesLinks = (await _db.StockReservations.AsNoTracking()
                     .Where(r => r.SupplyCommitmentLine.SupplyCommitmentId == id && r.SalesOrderLineId != null
                         && (r.Status == ReservationRules.StatusActive || r.Status == ReservationRules.StatusConsumed))
-                    .Select(r => new { r.SalesOrderLine.SalesOrderId, CustomerId = (int?)r.SalesOrderLine.SalesOrder.CustomerId, Customer = r.SalesOrderLine.SalesOrder.Customer.Name, OrderStatus = r.SalesOrderLine.SalesOrder.Status, r.Status, r.Quantity, r.Unit })
+                    .Select(r => new { r.SalesOrderLine.SalesOrderId, Customer = r.SalesOrderLine.SalesOrder.Customer.Name, OrderStatus = r.SalesOrderLine.SalesOrder.Status, r.Status, r.Quantity, r.Unit })
                     .ToListAsync(cancellationToken))
                 .GroupBy(r => new { r.SalesOrderId, r.Unit })
                 .Select(g => new PurchaseOrderSalesLinkDto
                 {
-                    SalesOrderId = g.Key.SalesOrderId, CustomerId = g.First().CustomerId, CustomerName = g.First().Customer, Status = g.First().OrderStatus, Unit = g.Key.Unit,
+                    SalesOrderId = g.Key.SalesOrderId, CustomerName = g.First().Customer, Status = g.First().OrderStatus, Unit = g.Key.Unit,
                     ReservedQuantity = g.Where(r => r.Status == ReservationRules.StatusActive).Sum(r => r.Quantity),
                     ShippedQuantity = g.Where(r => r.Status == ReservationRules.StatusConsumed).Sum(r => r.Quantity),
                 })

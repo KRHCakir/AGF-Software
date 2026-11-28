@@ -13,7 +13,7 @@ import ReceiveLocationField from './ReceiveLocationField';
 // Feedback 22 november: waar de inkooporder ontvangen wordt (de eigen loods, of een cross-dock, externe opslag, de leverancier of Onderweg /
 // direct naar klant), het laadadres (leeg als de leverancier levert; "Wij halen op" vult het adres van de leverancier) en het afleveradres
 // (leeg = de eigen loods; bij Onderweg het adres van de klant, te kiezen). Alles blijft gewone tekst die de gebruiker kan aanpassen.
-export default function OrderLogisticsFields({ value, onChange, locations, vendorId, customers, locked, errors, locationsFailed = false, onRetryLocations, ownWarehouseAddress = null, onAddLocation, defaultFailed = false, suggestedCustomerId = null }: {
+export default function OrderLogisticsFields({ value, onChange, locations, vendorId, customers, locked, errors, locationsFailed = false, onRetryLocations, ownWarehouseAddress = null, onAddLocation, defaultFailed = false }: {
     value: OrderLogisticsDraft;
     onChange: (next: OrderLogisticsDraft) => void;
     locations: readonly StockLocation[];
@@ -28,8 +28,6 @@ export default function OrderLogisticsFields({ value, onChange, locations, vendo
     ownWarehouseAddress?: string | null;
     onAddLocation?: () => void;
     defaultFailed?: boolean;
-    // De klant van de verkooporder(s) die van deze inkooporder verkopen, als dat er precies één is: voorstel bij Direct naar klant.
-    suggestedCustomerId?: number | null;
 }) {
     const { t } = useTranslation();
     const [customerId, setCustomerId] = useState('');
@@ -140,11 +138,6 @@ export default function OrderLogisticsFields({ value, onChange, locations, vendo
         }
         latest.current = next;
         onChange(next);
-        // Direct naar klant gekozen en nog geen adres: stel de klant van de gekoppelde verkooporder voor (als die eenduidig is).
-        if (!wasInTransit && isInTransit(locations, id) && next.deliveryAddress.trim() === '' && suggestedCustomerId != null) {
-            const suggested = customers.find((customer) => customer.id === suggestedCustomerId);
-            if (suggested) void chooseCustomer(suggested);
-        }
     };
     // Een afleveradres zonder Direct naar klant (van vóór november 2026): nooit stil weg, wel zichtbaar met Leegmaken.
     const earlierDelivery = !inTransit && value.deliveryAddress.trim() !== '';

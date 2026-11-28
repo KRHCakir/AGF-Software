@@ -1877,7 +1877,7 @@
   "po_line_lines_without_price": "{count} line(s) without price",
   "po_line_col_discount": "Discount %",
   "po_line_col_vat": "VAT",
-  "po_line_vat_none": "– (from article)",
+  "po_line_vat_none": "Article",
   "po_line_discount_hint": "empty = no discount",
   "order_amounts_net": "Total excl. VAT",
   "order_amounts_vat_rate": "VAT {rate}% on {net}",
@@ -3634,5 +3634,6 @@
   "po_logistics_delivery_customer": "Customer delivery address",
   "po_logistics_delivery_customer_placeholder": "Name and address of the customer",
   "po_logistics_delivery_earlier": "Delivery address (entered earlier)",
-  "po_logistics_delivery_clear": "Clear"
+  "po_logistics_delivery_clear": "Clear",
+  "chain_invoice_action": "Enter invoice"
 }

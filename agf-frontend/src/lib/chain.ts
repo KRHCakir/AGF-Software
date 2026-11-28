@@ -2,6 +2,7 @@ import type { PurchaseOrderDetail } from '../types/purchaseOrder';
 import type { SalesOrder } from '../types/salesOrder';
 import { orderNumbers } from './purchaseOrderRules.ts';
 import { dayMonth, orderLabel } from './salesSupply.ts';
+import { invoiceButton, invoiceEntryHref } from './purchaseOrderNextStep';
 
 // De keten-strip: Inkooporder > Ontvangst > Keuring > Voorraad > Verkooporder > Levering > Factuur, met per stap een status, aantallen
 // en links naar het juiste scherm met het juiste filter. Alles afgeleid uit wat de API al geeft (lezen, nooit opslaan). Een stap die
@@ -86,7 +87,11 @@ const purchaseInvoiceStep = (order: PurchaseOrderDetail): Omit<ChainStep, 'curre
         key: 'invoice',
         state: order.billingStatus === 'Full' ? 'done' : order.billingStatus === 'Partial' ? 'partial' : 'empty',
         parts: [{ key: `chain_billing_${order.billingStatus.toLowerCase()}` }],
-        links: (order.invoices ?? []).slice(0, MAX_LINKS).map((invoice) => ({ label: invoice.invoiceNumber ?? `#${invoice.id}`, href: `/purchase-invoices?id=${invoice.id}` })),
+        links: [
+            // November 2026: zolang niet alles gefactureerd is, opent de stap Factuur invoeren (zoals Ontvangen bij de ontvangst).
+            ...(invoiceButton(order) !== null ? [{ label: '', key: 'chain_invoice_action', href: invoiceEntryHref(order.id) }] : []),
+            ...(order.invoices ?? []).slice(0, MAX_LINKS).map((invoice) => ({ label: invoice.invoiceNumber ?? `#${invoice.id}`, href: `/purchase-invoices?id=${invoice.id}` })),
+        ],
     };
 };
 
