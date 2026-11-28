@@ -15,6 +15,13 @@ namespace AgfAdmin.Services
         public const int MaxNameLength = 100;
         public const int MaxAddressLength = 500;
 
+        // Onderweg is er altijd (november 2026): bij het opstarten komt er een actieve InTransit-locatie met deze naam als er geen is, en de
+        // laatste actieve InTransit-locatie blijft actief en Onderweg (guard-regel 47).
+        public const string StandardInTransitName = "Direct naar klant (onderweg)";
+        // Eén slot (PostgreSQL advisory lock) voor het aanmaken van de vaste locatie en voor de controles van guard-regel 47.
+        public const int LockClass = 47047;
+        public const string SystemActor = "systeem";
+
         public static bool IsKind(string value) => value != null && Kinds.Contains(value, StringComparer.Ordinal);
     }
 }

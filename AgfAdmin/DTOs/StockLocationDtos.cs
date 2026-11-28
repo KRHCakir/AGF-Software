@@ -14,6 +14,19 @@ namespace AgfAdmin.DTOs
         public int Version { get; set; }
     }
 
+    // De ontvangstlocatie van een nieuwe inkooporder (november 2026): de standaard (leeg = de ingebouwde Eigen loods) en het adres van de
+    // eigen loods uit de laadbon-instellingen, om onder "Eigen loods" te tonen.
+    public sealed class ReceiveDefaultsDto
+    {
+        public int? DefaultReceiveLocationId { get; set; }
+        public string OwnWarehouseAddress { get; set; }
+    }
+
+    public sealed class SaveReceiveDefaultsDto
+    {
+        public int? DefaultReceiveLocationId { get; set; }
+    }
+
     public sealed class SaveStockLocationDto
     {
         public string Name { get; set; }

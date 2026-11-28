@@ -60,6 +60,16 @@ namespace AgfAdmin.Services
                 return Invalid(new() { ["name"] = new() { "A stock location with this name already exists." } });
             }
             var inUse = (await UsedAsync(new List<int> { id }, cancellationToken)).Contains(id);
+            var leaves = (request.IsActive ?? location.IsActive) == false || location.Kind != request.Kind;
+            if (leaves && location.IsActive && location.Kind == StockLocationRules.KindInTransit
+                && !await _db.StockLocations.AnyAsync(l => l.Id != id && l.IsActive && l.Kind == StockLocationRules.KindInTransit, cancellationToken))
+            {
+                return Invalid(new() { [request.IsActive == false ? "isActive" : "kind"] = new() { "Onderweg / direct naar klant is always available: this is the last active location of that kind." } });
+            }
+            if (leaves && await _db.CompanySettings.AnyAsync(c => c.DefaultReceiveLocationId == id, cancellationToken))
+            {
+                return Invalid(new() { [request.IsActive == false ? "isActive" : "kind"] = new() { "This is the default receive location; choose another default first." } });
+            }
             if (inUse && location.Kind != request.Kind)
             {
                 return Invalid(new() { ["kind"] = new() { "Pallets or purchase orders use this location, so its kind is fixed." } });
@@ -75,7 +85,85 @@ namespace AgfAdmin.Services
             {
                 return ServiceResult<StockLocationDto>.Conflict("This stock location has been changed in the meantime; reload it first.");
             }
+            catch (TraceabilityViolationException exception)
+            {
+                // De controles hierboven zijn al gedaan; de guard (regel 47) weigert alleen nog bij een gelijktijdige wijziging: een conflict.
+                return ServiceResult<StockLocationDto>.Conflict(exception.Message);
+            }
             return ServiceResult<StockLocationDto>.Ok(ToDto(location, inUse));
+        }
+
+        // De ontvangstlocatie van een nieuwe inkooporder: de standaard (alleen als die nog een actieve eigen loods is) en het loodsadres.
+        public async Task<ReceiveDefaultsDto> ReceiveDefaultsAsync(CancellationToken cancellationToken = default)
+        {
+            var settings = await _db.CompanySettings.AsNoTracking().OrderBy(c => c.Id).Select(c => new { c.DefaultReceiveLocationId, c.LoadingSlipWarehouseAddress }).FirstOrDefaultAsync(cancellationToken);
+            var id = settings?.DefaultReceiveLocationId;
+            var valid = id != null && await _db.StockLocations.AnyAsync(l => l.Id == id && l.IsActive && l.Kind == StockLocationRules.KindOwnWarehouse, cancellationToken);
+            return new ReceiveDefaultsDto { DefaultReceiveLocationId = valid ? id : null, OwnWarehouseAddress = Text(settings?.LoadingSlipWarehouseAddress) };
+        }
+
+        // Instellingen › Voorraadlocaties: de standaard ontvangstlocatie (leeg = de ingebouwde Eigen loods, of een actieve eigen loods).
+        public async Task<ServiceResult<ReceiveDefaultsDto>> SaveReceiveDefaultsAsync(SaveReceiveDefaultsDto request, CancellationToken cancellationToken = default)
+        {
+            var id = request?.DefaultReceiveLocationId;
+            if (id != null && !await _db.StockLocations.AnyAsync(l => l.Id == id && l.IsActive && l.Kind == StockLocationRules.KindOwnWarehouse, cancellationToken))
+            {
+                return ServiceResult<ReceiveDefaultsDto>.Validation(new Dictionary<string, string[]>
+                {
+                    ["defaultReceiveLocationId"] = new[] { "Choose your own warehouse or an active location of the kind own warehouse." }
+                });
+            }
+            var settings = await _db.CompanySettings.OrderBy(c => c.Id).FirstOrDefaultAsync(cancellationToken);
+            if (settings == null)
+            {
+                settings = new CompanySettings();
+                _db.CompanySettings.Add(settings);
+            }
+            settings.DefaultReceiveLocationId = id;
+            try
+            {
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+            catch (TraceabilityViolationException exception)
+            {
+                return ServiceResult<ReceiveDefaultsDto>.Conflict(exception.Message);
+            }
+            return ServiceResult<ReceiveDefaultsDto>.Ok(await ReceiveDefaultsAsync(cancellationToken));
+        }
+
+        // Bij het opstarten (Program.cs), idempotent: Onderweg / direct naar klant is er altijd. Is er geen actieve InTransit-locatie, dan
+        // wordt een inactieve met de standaardnaam weer actief, of komt er een nieuwe. Bestaande InTransit-locaties blijven zoals ze zijn.
+        // In PostgreSQL met een transactie-slot, zodat twee API's die tegelijk starten er niet elk één maken.
+        public static async Task<bool> EnsureInTransitAsync(AppDbContext db, CancellationToken cancellationToken = default)
+        {
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+            if (db.Database.IsNpgsql())
+            {
+                await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({StockLocationRules.LockClass}, 1)", cancellationToken);
+            }
+            if (await db.StockLocations.AnyAsync(l => l.IsActive && l.Kind == StockLocationRules.KindInTransit, cancellationToken))
+            {
+                return false;
+            }
+            var now = DateTime.UtcNow;
+            var standard = await db.StockLocations.SingleOrDefaultAsync(l => l.Name == StockLocationRules.StandardInTransitName, cancellationToken);
+            if (standard != null && standard.Kind == StockLocationRules.KindInTransit)
+            {
+                (standard.IsActive, standard.UpdatedAt, standard.UpdatedBy) = (true, now, StockLocationRules.SystemActor);
+            }
+            else
+            {
+                var name = StockLocationRules.StandardInTransitName;
+                for (var n = 2; await db.StockLocations.AnyAsync(l => l.Name == name, cancellationToken); n++) name = $"{StockLocationRules.StandardInTransitName} ({n})";
+                db.StockLocations.Add(new StockLocation
+                {
+                    Name = name, Kind = StockLocationRules.KindInTransit, IsActive = true,
+                    CreatedAt = now, CreatedBy = StockLocationRules.SystemActor, UpdatedAt = now, UpdatedBy = StockLocationRules.SystemActor,
+                });
+            }
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return true;
         }
 
         // Locaties waar een pallet of inkooporder naar wijst.

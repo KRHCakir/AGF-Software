@@ -27,6 +27,14 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> Create([FromBody] SaveStockLocationDto request) =>
             this.ToActionResult(await _service.CreateAsync(request, HttpContext?.RequestAborted ?? default));
 
+        // Ontvangstlocatie van een nieuwe inkooporder: de standaard en het adres van de eigen loods (november 2026).
+        [HttpGet("receive-defaults")]
+        public async Task<IActionResult> ReceiveDefaults() => Ok(await _service.ReceiveDefaultsAsync(HttpContext?.RequestAborted ?? default));
+
+        [HttpPut("receive-defaults")]
+        public async Task<IActionResult> SaveReceiveDefaults([FromBody] SaveReceiveDefaultsDto request) =>
+            this.ToActionResult(await _service.SaveReceiveDefaultsAsync(request, HttpContext?.RequestAborted ?? default));
+
         [HttpPut("{id:int}")]
         public async Task<IActionResult> Update(int id, [FromBody] SaveStockLocationDto request) =>
             this.ToActionResult(await _service.UpdateAsync(id, request, HttpContext?.RequestAborted ?? default));
