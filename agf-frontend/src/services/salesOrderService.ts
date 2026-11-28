@@ -134,7 +134,7 @@ export async function reserveStock(orderId: number, lineId: number, request: Cre
 export async function getDirectTradeSupply(orderId: number, lineId: number, signal?: AbortSignal): Promise<DirectTradeSupplyLine[]> {
     const json = await getJson(`/sales-orders/${orderId}/lines/${lineId}/direct-trade-supply`, signal);
     if (!isDirectTradeSupplyList(json)) {
-        throw new ApiError('shape', 'Onverwacht antwoord bij de klantgebonden aanvoer.');
+        throw new ApiError('shape', 'Onverwacht antwoord bij de oude directe handel.');
     }
     return json;
 }

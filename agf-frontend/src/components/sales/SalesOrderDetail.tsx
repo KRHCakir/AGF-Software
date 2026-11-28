@@ -85,7 +85,8 @@ export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, ref
     // (Consumed) blokkeert annuleren. Een order waarvan alle verzendingen gecorrigeerd zijn, kan dus weer geannuleerd worden.
     // Magazijnverzendhistorie: alleen fysieke reserveringen. DirectTrade-verzendingen hebben een eigen lijst.
     const hasDispatchHistory = order.lines.some((line) => line.reservations.some((reservation) => reservation.source !== 'DirectTrade' && (reservation.status === 'Consumed' || reservation.status === 'Corrected')));
-    // DirectTrade-verzending: eigen paneel en lijst; een onafgeronde verzending blijft zichtbaar, ook als de toewijzingen al verzonden zijn.
+    // Oude directe handel (DirectTrade): eigen paneel en lijst, alleen bij oude gegevens; een onafgeronde verzending blijft zichtbaar, ook als
+    // de toewijzingen al verzonden zijn.
     const [shippingDt, setShippingDt] = useState(false);
     const [dtNotice, setDtNotice] = useState<SaveResult<DirectTradeShipment> | null>(null);
     const [dtToken, setDtToken] = useState(0);
@@ -337,9 +338,11 @@ export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, ref
                                 {t('sales_dispatch_order')}
                             </button>
                         )}
-                        {!readOnly && !showDtShipment && (
-                            <button type="button" className={`${secondaryButtonClass} border-violet-300 text-violet-900 hover:bg-violet-50`} onClick={() => { setDtNotice(null); setShippingDt(true); }}
-                                disabled={!hasShippableAllocation || (dtBlocker !== null && dtBlocker.kind !== 'ship-direct-trade')}>
+                        {/* Oude directe handel (vóór feedback 22 november): alleen bij een oude toewijzing die nog verzonden moet worden. Nieuwe orders
+                            krijgen deze knop nooit; goederen direct naar de klant zijn nu een inkooporder met Direct naar klant (onderweg). */}
+                        {!readOnly && !showDtShipment && hasShippableAllocation && (
+                            <button type="button" data-testid="sales-ship-old-direct" className={`${secondaryButtonClass} border-violet-300 text-violet-900 hover:bg-violet-50`} onClick={() => { setDtNotice(null); setShippingDt(true); }}
+                                disabled={dtBlocker !== null && dtBlocker.kind !== 'ship-direct-trade'}>
                                 <span aria-hidden="true">🔒 </span>{t('sales_ship_order')}
                             </button>
                         )}

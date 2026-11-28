@@ -74,11 +74,22 @@ export function warehouseRows(variants: VariantAvailability[], search: string, u
 }
 
 // Eén rij per klant + variant + eenheid; gesorteerd op klant zodat de klantbinding vooraan staat.
+// Oude directe handel (DirectTrade, van vóór feedback 22 november): open zolang er nog iets buiten het magazijn ontvangen, onderweg of
+// verwacht is, of er een signaal bij staat. Alleen open oude aanvoer staat in Beschikbaarheid; zonder open oude aanvoer is er geen blok.
+export function isOpenDirectTradeSupply(supply: DirectTradeSupply): boolean {
+    return breakdownTotal(supply.receivedOutsideWarehouse).quantity > 0 || breakdownTotal(supply.inTransit).quantity > 0
+        || breakdownTotal(supply.expectedOnPallets).quantity > 0 || supply.expectedUnregistered.quantity > 0 || supply.warnings.length > 0;
+}
+
+export function hasOpenDirectTrade(variants: readonly VariantAvailability[]): boolean {
+    return variants.some((variant) => variant.directTradeSupply.some(isOpenDirectTradeSupply));
+}
+
 export function directTradeRows(variants: VariantAvailability[], search: string, unit: UnitFilter): DirectTradeRow[] {
     return variants
         .filter((variant) => matchesSearch(variant, search))
         .flatMap((variant) => variant.directTradeSupply
-            .filter((supply) => matchesUnit(supply.unit, unit))
+            .filter((supply) => isOpenDirectTradeSupply(supply) && matchesUnit(supply.unit, unit))
             .map((supply) => ({
                 key: `${variant.productVariantId}:${supply.customerId ?? 'unknown'}:${supply.unit ?? 'unknown'}`,
                 variant,

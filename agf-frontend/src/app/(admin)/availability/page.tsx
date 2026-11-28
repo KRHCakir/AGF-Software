@@ -11,7 +11,7 @@ import { FirstStepLink } from '../../../components/shared/FirstStep';
 import SalesSupplyTable from '../../../components/availability/SalesSupplyTable';
 import WarehouseSupplyTable, { AvailabilityView, DETAILED_ONLY_FOCUS } from '../../../components/availability/WarehouseSupplyTable';
 import { useTranslation } from '../../../i18n/LanguageContext';
-import { DirectTradeRow, UnitFilter, WarehouseRow, directTradeRows, formatTime, warehouseRows } from '../../../lib/availability';
+import { DirectTradeRow, UnitFilter, WarehouseRow, directTradeRows, formatTime, hasOpenDirectTrade, warehouseRows } from '../../../lib/availability';
 import { unitLabelKey } from '../../../lib/units';
 import { parseAvailabilityParams } from '../../../lib/availabilityLinks';
 import { getAvailabilityOverview, toAvailabilityError } from '../../../services/availabilityService';
@@ -103,6 +103,8 @@ function AvailabilityWorkspace() {
     const variants = state.status === 'ready' ? state.data.variants : null;
     const warehouse = useMemo(() => (variants ? warehouseRows(variants, search, unitFilter) : []), [variants, search, unitFilter]);
     const directTrade = useMemo(() => (variants ? directTradeRows(variants, search, unitFilter) : []), [variants, search, unitFilter]);
+    // Oude directe handel staat er alleen zolang er open oude aanvoer is (of een contextlink er expliciet om vraagt).
+    const oldDirectTrade = useMemo(() => (variants ? hasOpenDirectTrade(variants) : false), [variants]) || route === 'DirectTrade';
     const filtersActive = search.trim() !== '' || unitFilter !== 'all';
 
     const openWarehouse = (row: WarehouseRow) => setSelection({
@@ -199,17 +201,20 @@ function AvailabilityWorkspace() {
                         <option value="unknown">{t('availability_unit_unknown')}</option>
                     </select>
                 </label>
-                <fieldset className="flex items-center gap-4 text-sm text-gray-800">
-                    <legend className="sr-only">{t('availability_sections_label')}</legend>
-                    <label className="flex items-center gap-1">
-                        <input type="checkbox" checked={showWarehouse} onChange={(event) => setShowWarehouse(event.target.checked)} />
-                        {t('availability_warehouse_title')}
-                    </label>
-                    <label className="flex items-center gap-1">
-                        <input type="checkbox" checked={showDirectTrade} onChange={(event) => setShowDirectTrade(event.target.checked)} />
-                        {t('availability_direct_title')}
-                    </label>
-                </fieldset>
+                {/* Alleen met oude directe handel zijn er twee blokken om te kiezen. */}
+                {oldDirectTrade && (
+                    <fieldset className="flex items-center gap-4 text-sm text-gray-800">
+                        <legend className="sr-only">{t('availability_sections_label')}</legend>
+                        <label className="flex items-center gap-1">
+                            <input type="checkbox" checked={showWarehouse} onChange={(event) => setShowWarehouse(event.target.checked)} />
+                            {t('availability_warehouse_title')}
+                        </label>
+                        <label className="flex items-center gap-1">
+                            <input type="checkbox" checked={showDirectTrade} onChange={(event) => setShowDirectTrade(event.target.checked)} />
+                            {t('availability_direct_title')}
+                        </label>
+                    </fieldset>
+                )}
             </div>
 
             {state.status === 'loading' && <LoadingRows label={t('availability_loading')} />}
@@ -222,7 +227,7 @@ function AvailabilityWorkspace() {
 
             {state.status === 'ready' && state.data.variants.length > 0 && (
                 <>
-                    {showWarehouse && route !== 'DirectTrade' && (
+                    {(showWarehouse || !oldDirectTrade) && route !== 'DirectTrade' && (
                         <section aria-labelledby="availability-warehouse" className="space-y-2">
                             <div className="flex flex-wrap items-end justify-between gap-3">
                                 <div>
@@ -255,8 +260,8 @@ function AvailabilityWorkspace() {
                         </section>
                     )}
 
-                    {showDirectTrade && route !== 'Warehouse' && (
-                        <section aria-labelledby="availability-direct" className="space-y-2">
+                    {oldDirectTrade && showDirectTrade && route !== 'Warehouse' && (
+                        <section aria-labelledby="availability-direct" className="space-y-2" data-testid="availability-old-direct">
                             <div>
                                 <h2 id="availability-direct" className="flex items-center gap-2 text-lg font-semibold text-violet-900">
                                     <span aria-hidden="true">🔒</span>{t('availability_direct_title')}

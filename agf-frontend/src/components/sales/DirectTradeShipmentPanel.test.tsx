@@ -176,7 +176,7 @@ describe('DirectTradeShipmentPanel through SalesOrderDetail', () => {
         assert.ok(mounted.hasText('sales_ship_kg_actual'));
         assert.ok(mounted.hasText('sales_line_dt_shipped'));
         assert.equal(mounted.hasText('sales_dispatches_title'), false, 'no warehouse dispatch section for a DirectTrade-only order');
-        assert.ok(mounted.buttons().find((b) => b.textContent?.includes('sales_ship_order'))?.disabled, 'nothing left to ship');
+        assert.equal(mounted.buttons().find((b) => b.textContent?.includes('sales_ship_order')), undefined, 'nothing left to ship: the old direct trade button is gone');
         assert.ok(mounted.button('sales_cancel_order')?.disabled, 'cancel is disabled after a shipment');
     });
 
@@ -195,5 +195,35 @@ describe('DirectTradeShipmentPanel through SalesOrderDetail', () => {
         assert.ok(mounted.hasText('sales_reservation_dt_shipped'));
         assert.equal(mounted.hasText('sales_reservation_consumed'), false, 'a DirectTrade row is never labelled as written off from stock');
     });
-});
 
+    // Opruimen (november 2026): oude directe handel alleen bij oude gegevens, en dan alleen lezen en afmaken.
+    test('a new order without old direct trade: no ship button, no allocate button, no old direct trade list or notice', async () => {
+        await mounted.render(element(orderWith(1, [])));
+        assert.equal(mounted.buttons().find((b) => b.textContent?.includes('sales_ship_order')), undefined);
+        assert.equal(mounted.buttons().find((b) => b.textContent?.includes('sales_allocate_direct_trade')), undefined);
+        assert.equal(mounted.container.querySelector('[data-testid="sales-ship-old-direct"]'), null);
+        assert.equal(mounted.hasText('sales_ship_list_title'), false);
+        assert.equal(mounted.hasText('sales_order_allocated_notice'), false);
+        assert.equal(mounted.hasText('sales_direct_trade_note'), false);
+    });
+
+    test('an order with an old allocation says Oude directe handel and can still ship it', async () => {
+        await mounted.render(element(orderWith(2, [allocation(21, 'Active')])));
+        const ship = mounted.container.querySelector<HTMLButtonElement>('[data-testid="sales-ship-old-direct"]');
+        assert.ok(ship && !ship.disabled, 'the old allocation can still be shipped');
+        assert.equal(ship.textContent?.includes('sales_ship_order'), true);
+        assert.ok(mounted.hasText('sales_order_allocated_notice'));
+        assert.equal(mounted.buttons().find((b) => b.textContent?.includes('sales_allocate_direct_trade')), undefined, 'never a new allocation');
+    });
+
+    test('an open old shipment (shipped, delivery not yet confirmed) is shown under Oude directe handel and can be finished', async () => {
+        shipments = [shipmentResponse('s-1')];
+        await mounted.render(element(orderWith(4, [allocation(21, 'Consumed')])));
+        await mounted.waitFor(() => (mounted.hasText('sales_ship_heading') ? true : null), 'old direct trade shipment list');
+        assert.ok(mounted.hasText('sales_ship_list_title'));
+        const confirm = mounted.button('sales_delivery_confirm');
+        assert.ok(confirm && !confirm.disabled, 'the delivery of the open old shipment can be confirmed');
+        await click(confirm);
+        await mounted.waitFor(() => (mounted.hasText('sales_delivery_title_direct_trade') ? true : null), 'delivery panel');
+    });
+});
