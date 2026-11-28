@@ -2,17 +2,18 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
-import { type OrderLogisticsDraft, isInTransit, locationChoices } from '../../lib/orderLogistics';
+import { type OrderLogisticsDraft, isInTransit } from '../../lib/orderLogistics';
 import { getAddressProposals } from '../../services/purchaseOrderService';
 import type { CustomerOption } from '../../types/referenceData';
 import type { StockLocation } from '../../types/stockLocation';
 import CustomerPicker from '../sales/CustomerPicker';
 import FieldError, { fieldProps, inputClass } from './FieldError';
+import ReceiveLocationField from './ReceiveLocationField';
 
 // Feedback 22 november: waar de inkooporder ontvangen wordt (de eigen loods, of een cross-dock, externe opslag, de leverancier of Onderweg /
 // direct naar klant), het laadadres (leeg als de leverancier levert; "Wij halen op" vult het adres van de leverancier) en het afleveradres
 // (leeg = de eigen loods; bij Onderweg het adres van de klant, te kiezen). Alles blijft gewone tekst die de gebruiker kan aanpassen.
-export default function OrderLogisticsFields({ value, onChange, locations, vendorId, customers, locked, errors, locationsFailed = false, onRetryLocations }: {
+export default function OrderLogisticsFields({ value, onChange, locations, vendorId, customers, locked, errors, locationsFailed = false, onRetryLocations, ownWarehouseAddress = null, onAddLocation, defaultFailed = false }: {
     value: OrderLogisticsDraft;
     onChange: (next: OrderLogisticsDraft) => void;
     locations: readonly StockLocation[];
@@ -23,6 +24,10 @@ export default function OrderLogisticsFields({ value, onChange, locations, vendo
     // De lijst met locaties kon niet geladen worden: zeg dat, met opnieuw proberen (review), zodat Eigen loods niet stilzwijgend lijkt te kloppen.
     locationsFailed?: boolean;
     onRetryLocations?: () => void;
+    // November 2026: het adres van de eigen loods (onder "Eigen loods") en Instellingen › Voorraadlocaties in een zijpaneel.
+    ownWarehouseAddress?: string | null;
+    onAddLocation?: () => void;
+    defaultFailed?: boolean;
 }) {
     const { t } = useTranslation();
     const [customerId, setCustomerId] = useState('');
@@ -124,23 +129,9 @@ export default function OrderLogisticsFields({ value, onChange, locations, vendo
     return (
         <fieldset className="grid grid-cols-1 gap-3 rounded border border-gray-200 p-2 md:grid-cols-3" data-tour="supply-logistics">
             <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-gray-600">{t('po_logistics_title')}</legend>
-            <div>
-                <label htmlFor="logistics.receiveLocationId-input" className="text-xs font-medium text-gray-700">{t('po_logistics_location')}</label>
-                <select {...fieldProps('logistics.receiveLocationId', errors('logistics.receiveLocationId'))} value={value.receiveLocationId} disabled={locked} data-tour="supply-receive-location"
-                    onChange={(event) => onChange({ ...value, receiveLocationId: event.target.value })} className={inputClass}>
-                    <option value="">{t('stock_location_own')}</option>
-                    {locationChoices(locations, value.receiveLocationId).map((location) => (
-                        <option key={location.id} value={String(location.id)}>{location.name} · {t(`stock_location_kind_${location.kind}`)}</option>
-                    ))}
-                </select>
-                <span className="block text-xs text-gray-500">{t(inTransit ? 'po_logistics_location_in_transit' : 'po_logistics_location_hint')}</span>
-                {locationsFailed && (
-                    <span role="alert" className="block text-xs text-amber-900" data-testid="logistics-locations-failed">
-                        {t('po_logistics_locations_failed')}{' '}
-                        {onRetryLocations && <button type="button" className="underline underline-offset-2" onClick={onRetryLocations}>{t('currency_list_retry')}</button>}
-                    </span>
-                )}
-            </div>
+            <ReceiveLocationField value={value.receiveLocationId} onChange={(id) => onChange({ ...latest.current, receiveLocationId: id })} locations={locations}
+                locked={locked} errors={errors} ownWarehouseAddress={ownWarehouseAddress} locationsFailed={locationsFailed} onRetryLocations={onRetryLocations}
+                onAddLocation={onAddLocation} defaultFailed={defaultFailed} />
             <div>
                 <label htmlFor="logistics.loadingAddress-input" className="text-xs font-medium text-gray-700">{t('po_logistics_loading')}</label>
                 <label className="mt-1 flex items-center gap-2 text-xs text-gray-800">

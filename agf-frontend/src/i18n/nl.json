@@ -3622,5 +3622,12 @@
   "tour_sinvoice_price_why": "Zolang er een regel zonder prijs is, kan de factuur niet definitief.",
   "si_direct_earlier_saved": "Een eerdere poging is mogelijk al opgeslagen als concept, met de gegevens van toen. Kijk eerst in Verkoopfacturen; opnieuw opslaan maakt een nieuw concept.",
   "po_line_vat_choose": "Kies…",
-  "si_direct_vat_required": "Kies het btw-tarief: 0, 9 of 21%."
+  "si_direct_vat_required": "Kies het btw-tarief: 0, 9 of 21%.",
+  "po_logistics_location_other": "Afwijkend?",
+  "po_logistics_location_back": "Terug naar standaard",
+  "po_logistics_location_add": "+ Locatie toevoegen",
+  "stock_location_default_title": "Standaard ontvangstlocatie",
+  "stock_location_default_hint": "Voor een nieuwe inkooporder, als er meer dan één eigen loods is.",
+  "stock_location_default_saved": "Standaard ontvangstlocatie opgeslagen.",
+  "po_logistics_default_failed": "De standaard ontvangstlocatie kon niet geladen worden. Kies zelf de juiste loods, of probeer het opnieuw."
 }

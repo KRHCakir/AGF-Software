@@ -29,4 +29,14 @@ export const isStockLocationKind = (value: unknown): value is StockLocationKind 
 export const isStockLocation = (value: unknown): value is StockLocation => isObject(value) && isNumber(value.id) && isString(value.name) && isStockLocationKind(value.kind)
     && isNullableString(value.address) && isNullableString(value.countryCode) && typeof value.isActive === 'boolean' && typeof value.inUse === 'boolean' && isNumber(value.version);
 
+// De ontvangstlocatie van een nieuwe inkooporder (november 2026): de standaard (null = de ingebouwde Eigen loods) en het adres van de eigen
+// loods uit de laadbon-instellingen.
+export interface ReceiveDefaults {
+    defaultReceiveLocationId: number | null;
+    ownWarehouseAddress: string | null;
+}
+
+export const isReceiveDefaults = (value: unknown): value is ReceiveDefaults => isObject(value)
+    && (value.defaultReceiveLocationId === null || isNumber(value.defaultReceiveLocationId)) && isNullableString(value.ownWarehouseAddress);
+
 export const isStockLocationList = (value: unknown): value is StockLocation[] => isArrayOf(value, isStockLocation);

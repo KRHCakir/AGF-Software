@@ -34,3 +34,19 @@ export function locationChoices(locations: readonly StockLocation[], current: st
 }
 
 export const isInTransit = (locations: readonly StockLocation[], id: string): boolean => locations.some((location) => String(location.id) === id && location.kind === 'InTransit');
+
+// November 2026: meer dan één eigen loods (de ingebouwde plus minstens één actieve locatie van de soort Eigen loods). Dan staat de keuzelijst
+// altijd open, met de standaard ontvangstlocatie voorgekozen; anders is Eigen loods de standaard als tekst met Afwijkend?.
+export const hasSeveralOwnWarehouses = (locations: readonly StockLocation[]): boolean => locations.some((location) => location.isActive && location.kind === 'OwnWarehouse');
+
+// De ontvangstlocatie van een nieuwe order: de standaard uit de instellingen, maar alleen bij meer dan één eigen loods en als die nog actief is.
+export function defaultReceiveLocation(locations: readonly StockLocation[], defaultId: number | null): string {
+    if (defaultId === null || !hasSeveralOwnWarehouses(locations)) return '';
+    return locations.some((location) => location.id === defaultId && location.isActive && location.kind === 'OwnWarehouse') ? String(defaultId) : '';
+}
+
+// De naam van de gekozen locatie voor de tekstweergave (leeg = Eigen loods; een onbekende id als nummer).
+export function receiveLocationName(locations: readonly StockLocation[], id: string, own: string): string {
+    if (id === '') return own;
+    return locations.find((location) => String(location.id) === id)?.name ?? `#${id}`;
+}
