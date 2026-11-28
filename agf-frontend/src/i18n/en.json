@@ -518,6 +518,7 @@
   "lot_color_save": "Save color",
   "lot_color_hint": "Applies to the whole lot, not only this pallet. Every change is recorded in the history.",
   "lot_color_no_list": "This product has no colors. Set them under Master data › Articles.",
+  "lot_color_text": "Color: {color}",
   "product_colors_title": "Colors of {product}",
   "product_colors_placeholder": "For example: green, yellow",
   "product_colors_hint": "Separated by commas, for example 1, 2, 3, 4, 5, 6 for pineapple. Empty = no color for this product. Applies to all articles of this product.",

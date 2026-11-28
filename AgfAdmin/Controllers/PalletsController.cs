@@ -51,6 +51,11 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> ChangeQualityStatus(int id, int lineId, [FromBody] ChangeQualityStatusDto request) =>
             this.ToActionResult(await _service.ChangeQualityStatusAsync(id, lineId, request, HttpContext?.RequestAborted ?? default));
 
+        // Alleen lezen: suggesties bij Wie beoordeelt uit eerdere keuringen (laatste 90 dagen, uniek, meest gebruikt eerst, hoogstens tien).
+        [HttpGet("recent-inspectors")]
+        public async Task<IActionResult> GetRecentInspectors() =>
+            Ok(await _service.GetRecentInspectorsAsync(HttpContext?.RequestAborted ?? default));
+
         // Alleen lezen: auditrecords worden nooit via de API gewijzigd of verwijderd.
         [HttpGet("{id:int}/audit-events")]
         public async Task<IActionResult> GetAuditEvents(int id) =>

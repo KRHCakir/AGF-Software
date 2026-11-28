@@ -1123,6 +1123,40 @@ namespace AgfAdmin.Services
             }).ToList());
         }
 
+        // ---- Wie beoordeelt: eerder ingevulde namen ----
+
+        public const int RecentInspectorDays = 90;
+        public const int RecentInspectorLimit = 10;
+
+        // Suggesties bij Wie beoordeelt: de namen die bij keuringen van de laatste 90 dagen zijn ingevuld, uniek (hoofdletters tellen niet),
+        // meest gebruikt eerst, hoogstens tien. Alleen het ingevulde veld telt, niet de ingelogde gebruiker; geen keuringen, geen suggesties.
+        public async Task<IReadOnlyList<string>> GetRecentInspectorsAsync(CancellationToken cancellationToken = default)
+        {
+            var since = DateTime.UtcNow.AddDays(-RecentInspectorDays);
+            var used = await _db.PalletAuditEvents
+                .AsNoTracking()
+                .Where(e => e.EventType == QualityStatusChangedEvent && e.InspectedBy != null && e.OccurredAt >= since)
+                .GroupBy(e => e.InspectedBy)
+                .Select(g => new { Name = g.Key, Count = g.Count(), Last = g.Max(e => e.OccurredAt) })
+                .ToListAsync(cancellationToken);
+
+            return used
+                .Select(u => (Name: u.Name.Trim(), u.Count, u.Last))
+                .Where(u => u.Name.Length > 0)
+                .GroupBy(u => u.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(g => (
+                    // De vaakst gebruikte schrijfwijze; bij gelijk aantal de laatst gebruikte.
+                    Name: g.OrderByDescending(u => u.Count).ThenByDescending(u => u.Last).First().Name,
+                    Count: g.Sum(u => u.Count),
+                    Last: g.Max(u => u.Last)))
+                .OrderByDescending(u => u.Count)
+                .ThenByDescending(u => u.Last)
+                .ThenBy(u => u.Name, StringComparer.Ordinal)
+                .Take(RecentInspectorLimit)
+                .Select(u => u.Name)
+                .ToList();
+        }
+
         // ---- Gedeelde stappen van de commando's ----
 
         private async Task<ServiceResult<T>> ReplayAsync<T>(StateCommand command, Func<Task<ServiceResult<T>>> currentState, CancellationToken cancellationToken)
